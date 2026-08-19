@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/podcasts/*.mp3
+data/digests.json
+.DS_Store
+.env
+.venv/
