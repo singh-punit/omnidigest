@@ -27,7 +27,7 @@ PODCAST_DIR = os.path.join(DATA_DIR, "podcasts")
 DIGESTS_FILE = os.path.join(DATA_DIR, "digests.json")
 FEEDS_FILE = os.path.join(DATA_DIR, "feeds.json")
 NTFY_URL = os.getenv("NTFY_URL", "http://ntfy:80/homelab-alerts")
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://192.168.0.65:8099")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://192.168.0.65:8100")
 
 # Autonomous Scheduling Configuration
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "7"))

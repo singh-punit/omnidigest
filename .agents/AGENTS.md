@@ -9,7 +9,7 @@ OmniDigest is a standalone autonomous intelligence crawler, local SLM synthesize
 - **Live Host**: OptiPlex Server (`192.168.0.65` / Tailscale `100.69.50.66`)
 - **Container Path on Hub**: `/srv/omnidigest`
 - **Container Name**: `omnidigest`
-- **Port Mapping**: Public `8099` $\rightarrow$ Container `8080`
+- **Port Mapping**: Public `8100` $\rightarrow$ Container `8080`
 - **Docker Network**: `punit_proxy-net`
 - **Resource Constraints**: `mem_limit: 512m`, `cpus: 1.0`
 - **Runtime Stack**: Python 3.12, FastAPI, Uvicorn, Edge Neural TTS, Qwen 2.5 (1.5B) via llama-server (`http://llama-server-qwen:8080/v1`)
@@ -43,11 +43,11 @@ OmniDigest runs an internal async lifespan background worker (`autonomous_schedu
 
 ## 📊 Monitoring & Alerts (Mandatory)
 
-- **Uptime Kuma Health Endpoint**: `http://192.168.0.65:8099/health` (includes status, version, model, and scheduler state)
+- **Uptime Kuma Health Endpoint**: `http://192.168.0.65:8100/health` (includes status, version, model, and scheduler state)
 - **Ntfy Push Alerts**: Linked to `http://ntfy:80` topic `homelab-alerts` with ASCII-sanitized headers.
 - **Status Check**:
   ```bash
-  curl -s http://192.168.0.65:8099/health
+  curl -s http://192.168.0.65:8100/health
   ```
 
 ---

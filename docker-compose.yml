@@ -9,7 +9,7 @@ services:
           memory: 256m
           cpus: "1.0"
     ports:
-      - "8099:8080"
+      - "8100:8080"
     environment:
       - TZ=Australia/Sydney
       - DATA_DIR=/app/data
@@ -17,7 +17,7 @@ services:
       - LLM_API_BASE=http://llama-server-qwen:8080/v1
       - LLM_MODEL=qwen2.5
       - NTFY_URL=http://ntfy:80/homelab-alerts
-      - PUBLIC_BASE_URL=http://192.168.0.65:8099
+      - PUBLIC_BASE_URL=http://192.168.0.65:8100
       - SCHEDULE_HOUR=7
       - SCHEDULE_MINUTE=0
     volumes:
