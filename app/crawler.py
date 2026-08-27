@@ -24,10 +24,10 @@ def clean_html(raw_html: str) -> str:
     clean = re.sub(r'\s+', ' ', clean).strip()
     return clean
 
-async def fetch_feed(client: httpx.AsyncClient, feed_meta: Dict[str, Any], max_items: int = 3) -> List[Dict[str, Any]]:
+async def fetch_feed(client: httpx.AsyncClient, feed_meta: Dict[str, Any], max_items: int = 3, headers: dict = None) -> List[Dict[str, Any]]:
     results = []
     try:
-        resp = await client.get(feed_meta["url"], timeout=12.0, follow_redirects=True)
+        resp = await client.get(feed_meta["url"], timeout=12.0, follow_redirects=True, headers=headers)
         if resp.status_code != 200:
             logger.warning(f"Failed to fetch {feed_meta['url']}: status {resp.status_code}")
             return results
@@ -62,14 +62,18 @@ async def fetch_feed(client: httpx.AsyncClient, feed_meta: Dict[str, Any], max_i
         logger.error(f"Error crawling feed {feed_meta['name']}: {e}")
     return results
 
-async def crawl_all_feeds(feeds: List[Dict[str, Any]] = None, max_items_per_feed: int = 3) -> List[Dict[str, Any]]:
+async def crawl_all_feeds(feeds: List[Dict[str, Any]] = None, max_items_per_feed: int = 3, client: httpx.AsyncClient = None) -> List[Dict[str, Any]]:
     if not feeds:
         feeds = DEFAULT_FEEDS
     
     headers = {"User-Agent": "Mozilla/5.0 (compatible; OmniDigest-Homelab/2.0; +http://192.168.0.65)"}
-    async with httpx.AsyncClient(headers=headers) as client:
-        tasks = [fetch_feed(client, f, max_items_per_feed) for f in feeds]
+    if client:
+        tasks = [fetch_feed(client, f, max_items_per_feed, headers=headers) for f in feeds]
         nested_results = await asyncio.gather(*tasks, return_exceptions=True)
+    else:
+        async with httpx.AsyncClient(headers=headers) as local_client:
+            tasks = [fetch_feed(local_client, f, max_items_per_feed) for f in feeds]
+            nested_results = await asyncio.gather(*tasks, return_exceptions=True)
     
     feed_buckets = []
     for res in nested_results:

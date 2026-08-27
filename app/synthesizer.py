@@ -124,7 +124,7 @@ def clean_synthesized_text(text: str) -> str:
         
     return text
 
-async def synthesize_digest(articles: List[Dict[str, Any]], custom_prompt: str = "") -> Tuple[str, str, List[str]]:
+async def synthesize_digest(articles: List[Dict[str, Any]], custom_prompt: str = "", client: httpx.AsyncClient = None) -> Tuple[str, str, List[str]]:
     """
     Synthesizes rich executive memo, broadcast audio podcast script, and analytical key highlights.
     Returns:
@@ -165,19 +165,21 @@ async def synthesize_digest(articles: List[Dict[str, Any]], custom_prompt: str =
         user_message += f"\n\nExecutive Focus Request: {custom_prompt}"
 
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(
-                f"{LLM_API_BASE}/chat/completions",
-                json={
-                    "model": LLM_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    "temperature": 0.2,
-                    "max_tokens": 1400
-                }
-            )
+        payload = {
+            "model": LLM_MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1400
+        }
+        
+        if client:
+            resp = await client.post(f"{LLM_API_BASE}/chat/completions", json=payload, timeout=90.0)
+        else:
+            async with httpx.AsyncClient(timeout=90.0) as local_client:
+                resp = await local_client.post(f"{LLM_API_BASE}/chat/completions", json=payload)
             
             if resp.status_code == 200:
                 data = resp.json()

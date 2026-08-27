@@ -4,7 +4,10 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    libjemalloc2 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV LD_PRELOAD=libjemalloc.so.2
 
 WORKDIR /app
 

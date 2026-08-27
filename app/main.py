@@ -3,7 +3,7 @@ import json
 import time
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Query
@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 import httpx
+import anyio
 
 from app.crawler import crawl_all_feeds, DEFAULT_FEEDS
 from app.synthesizer import synthesize_digest, clean_synthesized_text, LLM_MODEL, LLM_API_BASE
@@ -92,17 +93,44 @@ async def autonomous_scheduler_loop():
             except Exception as e:
                 logger.error(f"Scheduled briefing generation failed: {e}")
                 scheduler_state["last_status"] = f"Scheduled run error: {e}"
-                
-        await asyncio.sleep(40)
+        
+        target = now.replace(hour=SCHEDULE_HOUR, minute=SCHEDULE_MINUTE, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        sleep_seconds = (target - now).total_seconds()
+        
+        try:
+            await asyncio.sleep(sleep_seconds)
+        except asyncio.CancelledError:
+            break
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    global shared_client, _digests_dirty, _feeds_dirty
+    # Cap anyio threads to 2
+    anyio.to_thread.current_default_thread_limiter().total_tokens = 2
+    shared_client = httpx.AsyncClient(timeout=10.0, limits=httpx.Limits(max_keepalive_connections=20))
+    
+    # Pre-warm caches
+    load_digests()
+    load_feeds()
+    
     scheduler_task = asyncio.create_task(autonomous_scheduler_loop())
+    flusher_task = asyncio.create_task(disk_flusher_loop())
     yield
-    # Shutdown
     scheduler_state["running"] = False
     scheduler_task.cancel()
+    flusher_task.cancel()
+    
+    if _digests_dirty:
+        with open(DIGESTS_FILE, "w") as f:
+            f.write(json.dumps(_digests_cache, separators=(',', ':')))
+    if _feeds_dirty:
+        with open(FEEDS_FILE, "w") as f:
+            f.write(json.dumps(_feeds_cache, separators=(',', ':')))
+            
+    if shared_client:
+        await shared_client.aclose()
 
 app = FastAPI(
     title="OmniDigest",
@@ -136,32 +164,58 @@ class GenerateRequest(BaseModel):
     category_filter: Optional[str] = None
     speed_rate: Optional[str] = "+0%"
 
+shared_client: Optional[httpx.AsyncClient] = None
+_digests_cache = None
+_feeds_cache = None
+_digests_dirty = False
+_feeds_dirty = False
+
+async def disk_flusher_loop():
+    global _digests_dirty, _feeds_dirty
+    while scheduler_state["running"]:
+        await asyncio.sleep(30)
+        if _digests_dirty:
+            data = json.dumps(_digests_cache, separators=(',', ':'))
+            await anyio.Path(DIGESTS_FILE).write_text(data)
+            _digests_dirty = False
+        if _feeds_dirty:
+            data = json.dumps(_feeds_cache, separators=(',', ':'))
+            await anyio.Path(FEEDS_FILE).write_text(data)
+            _feeds_dirty = False
+
 def load_digests() -> List[Dict[str, Any]]:
-    if os.path.exists(DIGESTS_FILE):
-        try:
-            with open(DIGESTS_FILE, "r") as f:
-                items = json.load(f)
-                # Defensive sanitization on loaded history
-                for item in items:
-                    if isinstance(item, dict) and "markdown_report" in item:
-                        item["markdown_report"] = clean_synthesized_text(str(item["markdown_report"]))
-                return items
-        except Exception:
-            return []
-    return []
+    global _digests_cache
+    if _digests_cache is None:
+        if os.path.exists(DIGESTS_FILE):
+            try:
+                with open(DIGESTS_FILE, "r") as f:
+                    _digests_cache = json.load(f)
+                    for item in _digests_cache:
+                        if isinstance(item, dict) and "markdown_report" in item:
+                            item["markdown_report"] = clean_synthesized_text(str(item["markdown_report"]))
+            except Exception:
+                _digests_cache = []
+        else:
+            _digests_cache = []
+    return _digests_cache
 
 def save_digests(digests: List[Dict[str, Any]]):
-    with open(DIGESTS_FILE, "w") as f:
-        json.dump(digests, f, indent=2)
+    global _digests_cache, _digests_dirty
+    _digests_cache = digests
+    _digests_dirty = True
 
 def load_feeds() -> List[Dict[str, Any]]:
-    if os.path.exists(FEEDS_FILE):
-        try:
-            with open(FEEDS_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            return DEFAULT_FEEDS
-    return DEFAULT_FEEDS
+    global _feeds_cache
+    if _feeds_cache is None:
+        if os.path.exists(FEEDS_FILE):
+            try:
+                with open(FEEDS_FILE, "r") as f:
+                    _feeds_cache = json.load(f)
+            except Exception:
+                _feeds_cache = DEFAULT_FEEDS
+        else:
+            _feeds_cache = DEFAULT_FEEDS
+    return _feeds_cache
 
 async def send_ntfy_alert(title: str, message: str, audio_url: str):
     if not NTFY_URL:
@@ -176,8 +230,8 @@ async def send_ntfy_alert(title: str, message: str, audio_url: str):
             "Click": f"{PUBLIC_BASE_URL}",
             "Actions": f"view, Listen to Audio Brief, {audio_url}"
         }
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(NTFY_URL, content=message.encode("utf-8"), headers=headers)
+        if shared_client:
+            await shared_client.post(NTFY_URL, content=message.encode("utf-8"), headers=headers)
             logger.info("Dispatched Ntfy audio briefing push alert")
     except Exception as e:
         logger.error(f"Failed to send Ntfy notification: {e}")
@@ -188,7 +242,7 @@ async def run_digest_pipeline(custom_prompt: str = "", voice: str = "en-US-Chris
     logger.info(f"Starting OmniDigest generation [{timestamp_id}] with prompt '{custom_prompt}'...")
 
     feeds = load_feeds()
-    articles = await crawl_all_feeds(feeds, max_items_per_feed=4)
+    articles = await crawl_all_feeds(feeds, max_items_per_feed=4, client=shared_client)
     
     # Optional category filtering
     if category_filter and category_filter.lower() != "all":
@@ -198,7 +252,7 @@ async def run_digest_pipeline(custom_prompt: str = "", voice: str = "en-US-Chris
             
     logger.info(f"Crawled {len(articles)} articles across {len(feeds)} sources")
 
-    markdown_report, audio_script, highlights = await synthesize_digest(articles, custom_prompt)
+    markdown_report, audio_script, highlights = await synthesize_digest(articles, custom_prompt, client=shared_client)
     
     # Generate MP3
     audio_filename = f"digest_{timestamp_id}.mp3"
@@ -245,8 +299,7 @@ async def run_digest_pipeline(custom_prompt: str = "", voice: str = "en-US-Chris
 async def serve_index():
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            return f.read()
+        return await anyio.Path(index_path).read_text()
     return "<h1>OmniDigest API Running</h1>"
 
 @app.get("/health")
@@ -287,7 +340,7 @@ async def get_live_news(max_items: int = Query(default=4, le=10)):
     Retrieves fresh articles across all configured RSS feeds immediately.
     """
     feeds = load_feeds()
-    articles = await crawl_all_feeds(feeds, max_items_per_feed=max_items)
+    articles = await crawl_all_feeds(feeds, max_items_per_feed=max_items, client=shared_client)
     return {
         "status": "success",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -336,8 +389,8 @@ async def test_feed(payload: Dict[str, str]):
     try:
         import feedparser
         headers = {"User-Agent": "Mozilla/5.0 (compatible; OmniDigest-Homelab/2.0)"}
-        async with httpx.AsyncClient(headers=headers, timeout=8.0, follow_redirects=True) as client:
-            resp = await client.get(url)
+        if shared_client:
+            resp = await shared_client.get(url, headers=headers, follow_redirects=True)
             if resp.status_code != 200:
                 return {"status": "error", "message": f"Server status {resp.status_code}"}
             parsed = feedparser.parse(resp.text)
@@ -367,6 +420,7 @@ async def get_feeds():
 
 @app.post("/api/feeds")
 async def update_feeds(feeds: List[Dict[str, Any]]):
-    with open(FEEDS_FILE, "w") as f:
-        json.dump(feeds, f, indent=2)
+    global _feeds_cache, _feeds_dirty
+    _feeds_cache = feeds
+    _feeds_dirty = True
     return {"status": "success", "feeds": feeds}
