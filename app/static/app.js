@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * ================================================================ */
   function init() {
     initTheme();
-    if (D.aiModelBadge) D.aiModelBadge.textContent = '🤖 Qwen 2.5 (1.5B) · Local';
+    if (D.aiModelBadge) D.aiModelBadge.textContent = '✦ Qwen 2.5 (1.5B) · Local';
     initWaveform();
     initEventListeners();
     loadHistory().then(() => loadLatestDigest());
@@ -598,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (D.briefDate) D.briefDate.textContent = dateStr;
     const isLatest = State.history.length > 0 && digest.id === State.history[0].id;
     if (D.briefDateBadge) D.briefDateBadge.textContent = isLatest ? 'CURRENT EDITION' : 'ARCHIVED EDITION';
-    if (D.briefModelTag) D.briefModelTag.textContent = digest.model_used ? `🤖 ${digest.model_used}` : '🤖 Qwen 2.5 (1.5B) · Local';
+    if (D.briefModelTag) D.briefModelTag.textContent = digest.model_used ? `✦ ${digest.model_used}` : '✦ Qwen 2.5 (1.5B) · Local';
     if (D.playerTitle) D.playerTitle.textContent = digest.custom_prompt || 'OmniDigest Executive Briefing';
 
     // Audio Setup

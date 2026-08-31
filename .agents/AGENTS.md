@@ -103,11 +103,11 @@ Small language models (e.g. Qwen 2.5 1.5B) occasionally produce malformed JSON s
   - Default: **Porcelain (Light Mode)** — Crisp editorial off-white (`#f8fafc`), deep slate typography (`#0f172a`), subtle slate borders (`#e2e8f0`), and soft shadows.
   - Secondary: **Obsidian (Dark Mode)** — Deep charcoal/slate (`#090d16`), silver text (`#f8fafc`), and sky blue accents.
   - Header Sun/Moon icon toggle button (`#btn-theme-toggle`, shortcut <kbd>T</kbd>) with persistent `localStorage` saving.
-- **Local AI Attribution (MANDATORY)**: Display `🤖 Qwen 2.5 (1.5B) · Local` in the header and on synthesized digests.
+- **Local AI Attribution (MANDATORY)**: Display `✦ Qwen 2.5 (1.5B) · Local` in the header and on synthesized digests.
 - **ESC Key Handling (MANDATORY)**: Pressing the ESC key must close all modal overlays and side drawers.
 - **On-Demand Intelligence Studio Bar**:
   - Custom topic prompt input with instant trigger (<kbd>Enter</kbd> or Go button).
-  - Quick Focus preset chips (*🔥 All Intel*, *🤖 AI & LLMs*, *💻 Dev & Infra*, *📈 Markets*, *🛡️ Security*, *🚀 ArXiv Research*).
+  - Quick Focus preset chips (*🔥 All Intel*, *✦ AI & LLMs*, *💻 Dev & Infra*, *📈 Markets*, *🛡️ Security*, *🚀 ArXiv Research*).
   - Collapsible speech settings for Neural Voice (`Christopher`, `Guy`, `Jenny`, `Sonia`) and Speed Rate (`-15%`, `+0%`, `+10%`, `+20%`).
   - Real-time multi-stage generation progress bar (*1/3 Fetching Feeds* $\rightarrow$ *2/3 SLM Synthesizing* $\rightarrow$ *3/3 Neural Audio Rendering* $\rightarrow$ *Completed*).
 - **Recent Briefings Carousel Strip**:
