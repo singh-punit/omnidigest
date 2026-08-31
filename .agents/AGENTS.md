@@ -103,7 +103,13 @@ Small language models (e.g. Qwen 2.5 1.5B) occasionally produce malformed JSON s
   - Default: **Porcelain (Light Mode)** — Crisp editorial off-white (`#f8fafc`), deep slate typography (`#0f172a`), subtle slate borders (`#e2e8f0`), and soft shadows.
   - Secondary: **Obsidian (Dark Mode)** — Deep charcoal/slate (`#090d16`), silver text (`#f8fafc`), and sky blue accents.
   - Header Sun/Moon icon toggle button (`#btn-theme-toggle`, shortcut <kbd>T</kbd>) with persistent `localStorage` saving.
-- **Local AI Attribution (MANDATORY)**: Display `✦ Qwen 2.5 (1.5B) · Local` in the header and on synthesized digests.
+- **Local AI Attribution, Living Status Dot & Robot Icon Ban (MANDATORY)**:
+  - Display `✦ Qwen 2.5 (1.5B) · Local` with clean spark standard across header and synthesized digests.
+  - Robot emojis/icons (`🤖`) are strictly banned across all titles, badges, and documentation.
+  - All AI attribution badges must include an animated pulsing emerald status indicator (`.ai-pulse-dot`) and glassmorphic pill background.
+- **Static Asset Cache-Busting & Zero-Stale Invariant (MANDATORY)**:
+  - All static asset references (`app.js`, `style.css`) in HTML must include version query parameters (`?v=...`), and backend servers must send `Cache-Control: no-cache, no-store, must-revalidate, max-age=0`.
+  - Code changes to containerized apps must be synced directly to `/srv/omnidigest/` on `192.168.0.65` with container restart in addition to git commits.
 - **ESC Key Handling (MANDATORY)**: Pressing the ESC key must close all modal overlays and side drawers.
 - **On-Demand Intelligence Studio Bar**:
   - Custom topic prompt input with instant trigger (<kbd>Enter</kbd> or Go button).
