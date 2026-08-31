@@ -148,15 +148,26 @@ document.addEventListener('DOMContentLoaded', () => {
     liveCat: 'all',
   };
 
-  /* ================================================================
-   * Application Boot
-   * ================================================================ */
+  function enforceCleanBranding() {
+    if (D.aiModelBadge) {
+      D.aiModelBadge.innerHTML = '<span class="ai-pulse-dot"></span>✦ Qwen 2.5 (1.5B) · Local';
+    }
+    document.querySelectorAll('.ai-tag, .tag-model, #ai-model-badge, #brief-model-tag, .chip').forEach(el => {
+      if (el.textContent && el.textContent.includes('🤖')) {
+        el.textContent = el.textContent.replace(/🤖/g, '✦');
+      }
+    });
+  }
+
   function init() {
     initTheme();
-    if (D.aiModelBadge) D.aiModelBadge.innerHTML = '<span class="ai-pulse-dot"></span>✦ Qwen 2.5 (1.5B) · Local';
+    enforceCleanBranding();
     initWaveform();
     initEventListeners();
-    loadHistory().then(() => loadLatestDigest());
+    loadHistory().then(() => {
+      loadLatestDigest();
+      enforceCleanBranding();
+    });
   }
 
   /* ================================================================
