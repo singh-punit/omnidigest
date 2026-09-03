@@ -76,3 +76,17 @@ This document records the architectural, algorithmic, and design decisions made 
   2. Move visual emoji representations into the Ntfy `Tags` header (`Tags: "newspaper,headphones,sparkles"`).
 * **Consequences**:
   100% reliable Ntfy alert dispatching across all platforms and proxies.
+
+---
+
+## 🎧 ADR 006: Multi-Network Relative Audio Stream Routing (Tailscale / LAN / Cloudflare)
+
+* **Date**: September 2026
+* **Status**: Accepted
+* **Context**:
+  OmniDigest embedded absolute base URLs (`http://192.168.0.65:20203/...`) into the briefing JSON data payload. When users accessed OmniDigest via remote networks (Tailscale IP `100.69.50.66` or Cloudflare ingress), browsers attempted cross-origin requests to the unreachable LAN IP, silently blocking audio playback.
+* **Decision**:
+  1. Frontend Player (`app/static/app.js`): Resolve audio source dynamically using relative URL paths (`/podcasts/${digest.audio_file}`) with pathname fallback for legacy payloads.
+  2. Cache Busting (`app/static/index.html`): Bump static versioning to `?v=2.4.2` to immediately bypass mobile browser disk caches.
+* **Consequences**:
+  Zero audio playback failures across LAN, VPN, Tailscale, and public ingress domains.

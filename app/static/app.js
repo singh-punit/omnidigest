@@ -615,15 +615,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (D.playerTitle) D.playerTitle.textContent = digest.custom_prompt || 'OmniDigest Executive Briefing';
 
-    // Audio Setup
-    if (D.audioElement && digest.audio_url) {
-      D.audioElement.src = digest.audio_url;
+    // Audio Setup (Use relative URL so it plays seamlessly across LAN, Tailscale, Cloudflare)
+    const audioSrc = digest.audio_file ? ('/podcasts/' + digest.audio_file) : (digest.audio_url ? (digest.audio_url.startsWith('http') ? new URL(digest.audio_url).pathname : digest.audio_url) : '');
+    if (D.audioElement && audioSrc) {
+      D.audioElement.src = audioSrc;
       D.audioElement.load();
       D.audioElement.playbackRate = SPEEDS[State.speedIdx];
     }
     if (D.btnActionDownload) {
-      if (digest.audio_url) {
-        D.btnActionDownload.href = digest.audio_url;
+      if (audioSrc) {
+        D.btnActionDownload.href = audioSrc;
         D.btnActionDownload.style.display = 'inline-flex';
       } else {
         D.btnActionDownload.style.display = 'none';
