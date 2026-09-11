@@ -5,12 +5,17 @@ OmniDigest autonomously crawls top tech, AI research (arXiv), cyber security, fi
 
 ---
 
-## ⚡ Key Capabilities (v2.2.0)
+## ⚡ Key Capabilities (v2.5.0)
 
+- **⚡ High-Throughput `orjson` Engine**: Ultra-fast Rust-based JSON serialization with automatic fallback shim for sub-millisecond API responses and minimal RAM footprint.
+- **🧹 Automated Audio Hygiene**: In-process garbage collector continuously purges orphaned `.mp3` podcasts when unpinned briefings are pruned, preventing disk volume bloat.
+- **📱 Progressive Web App (PWA)**: Standalone native app installation on iOS, Android, and macOS with adaptive light/dark theme colors.
+- **🎧 Lock Screen Hardware Audio Control**: Native `navigator.mediaSession` integration with custom artwork, playback metadata, track skipping, and scrubbing.
+- **⌘ Spotlight Command Palette**: Instant <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> shortcut search for zero-mouse command execution, quick topic filtering, and historical briefing jumps.
 - **⏰ Autonomous In-App Scheduler**: Automatically crawls and synthesizes daily morning briefings at 07:00 AM (AEST), with automatic catch-up on container startup.
-- **🎨 Editorial UX & Porcelain Theme**: Human-crafted editorial intelligence interface inspired by Substack, Linear, Stripe Press, and Apple Podcasts. Features a clean dual-theme system (**Porcelain Light Mode** default & **Obsidian Dark Mode**).
+- **🎨 Editorial UX & Dual Theme**: Human-crafted editorial intelligence interface inspired by Substack, Linear, Stripe Press, and Apple Podcasts. Features **Porcelain Light** and **Obsidian Dark**.
 - **🌐 Balanced Multi-Source Ingestion**: Interleaved round-robin ranking across 7 top feeds (*Hacker News, ArXiv AI, TechCrunch, CoinDesk Markets, Ars Technica, BleepingComputer, Wired*).
-- **📱 Adaptive Bounds-Clamped Waveform Player**: Responsive audio scrubber that dynamically scales across desktop, tablet, and mobile screens without overflow.
+- **📱 Adaptive Bounds-Clamped Waveform Player**: Responsive audio visualizer that dynamically scales across desktop and mobile screens.
 - **🧠 Local SLM Resilience**: Built-in JSON repair algorithms, token-limit recovery, and fallback parsers preventing raw JSON leakage.
 - **🔔 Instant Phone Alerts**: Push notifications sent via Ntfy (`homelab-alerts`) with one-tap streaming links.
 

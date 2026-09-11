@@ -1918,3 +1918,167 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   14. Command Palette (Cmd+K / Ctrl+K) Spotlight Modal
+   ========================================================================== */
+.cmd-k-sheet {
+  max-width: 560px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.35), var(--shadow-lg);
+  overflow: hidden;
+  padding: 0;
+}
+
+.cmd-k-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+}
+
+.cmd-k-icon {
+  font-size: 1.1rem;
+  opacity: 0.6;
+}
+
+#cmd-k-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+#cmd-k-input::placeholder {
+  color: var(--text-muted);
+}
+
+.cmd-k-results {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cmd-k-group-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.cmd-k-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.cmd-k-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.cmd-k-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface-subtle);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.cmd-k-item-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.cmd-k-item-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cmd-k-item-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.cmd-k-item-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cmd-k-shortcut {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 0.15rem 0.4rem;
+  color: var(--text-secondary);
+}
+
+.cmd-k-item:hover,
+.cmd-k-item.active {
+  background: var(--accent-dim);
+}
+
+.cmd-k-item.active .cmd-k-item-icon {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.cmd-k-item.active .cmd-k-item-title {
+  color: var(--accent);
+}
+
+.cmd-k-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.cmd-k-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-surface-subtle);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.cmd-k-footer kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 0.1rem 0.35rem;
+  color: var(--text-secondary);
+}

@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>OmniDigest — Autonomous AI Intelligence & Neural Audio</title>
   <meta name="description" content="Autonomous homelab intelligence crawler, local SLM synthesizer, and neural audio briefing engine.">
+  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#090d16" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="/static/manifest.json">
   <link rel="icon" type="image/svg+xml" href="/static/omnidigest.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.4.1">
+  <link rel="stylesheet" href="/static/style.css?v=2.5.0">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -37,6 +40,10 @@
       <button id="btn-archive-drawer" class="hdr-btn" title="Archive (A)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span class="hdr-badge" id="header-history-count">0</span>
+      </button>
+      <button id="btn-cmd-k" class="hdr-btn" title="Command Palette (⌘K)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span class="hdr-btn-label">⌘K</span>
       </button>
       <button id="btn-theme-toggle" class="hdr-btn hdr-btn-theme" title="Toggle Light / Dark Mode">
         <svg id="theme-icon-sun" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -289,9 +296,27 @@
     <div class="drawer-foot">
       <button id="archive-prev-btn" class="pg-btn">‹</button>
       <span id="archive-page-info" class="pg-info">1 / 1</span>
-      <button id="archive-next-btn" class="pg-btn">›</button>
+      <button id="close-drawer" class="btn-icon">×</button>
     </div>
   </aside>
+
+  <!-- Cmd+K Command Palette Modal -->
+  <div id="cmd-k-modal" class="modal-overlay">
+    <div class="modal-sheet cmd-k-sheet">
+      <div class="cmd-k-input-wrap">
+        <span class="cmd-k-icon">🔍</span>
+        <input type="text" id="cmd-k-input" placeholder="Type a command or search... (e.g. Generate, Dark Mode)" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="cmd-k-results" id="cmd-k-results">
+        <!-- Results injected here -->
+      </div>
+      <div class="cmd-k-footer">
+        <span><kbd>↑</kbd> <kbd>↓</kbd> to navigate</span>
+        <span><kbd>↵</kbd> to select</span>
+        <span><kbd>ESC</kbd> to dismiss</span>
+      </div>
+    </div>
+  </div>
 
   <!-- Live News Modal -->
   <div id="live-news-modal" class="modal-overlay">
@@ -362,6 +387,6 @@
   <!-- Interactive Floating Toast -->
   <div id="toast" class="toast"></div>
 
-  <script src="/static/app.js?v=2.4.2"></script>
+  <script src="/static/app.js?v=2.5.0"></script>
 </body>
 </html>

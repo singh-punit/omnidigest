@@ -123,6 +123,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Floating Toast
     toast:               $('toast'),
+
+    // Command Palette (Cmd+K)
+    btnCmdK:             $('btn-cmd-k'),
+    cmdKModal:           $('cmd-k-modal'),
+    cmdKInput:           $('cmd-k-input'),
+    cmdKResults:         $('cmd-k-results'),
   };
 
   /* ================================================================
@@ -146,6 +152,8 @@ document.addEventListener('DOMContentLoaded', () => {
     feeds: [],
     liveArticles: [],
     liveCat: 'all',
+    cmdKIndex: 0,
+    cmdKFilteredItems: [],
   };
 
   function enforceCleanBranding() {
@@ -163,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     enforceCleanBranding();
     initWaveform();
+    setupMediaSessionHandlers();
     initEventListeners();
     loadHistory().then(() => {
       loadLatestDigest();
@@ -282,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function closeAllOverlays() {
     document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
     if (D.archiveDrawer) D.archiveDrawer.classList.remove('active');
+    if (D.cmdKInput) D.cmdKInput.blur();
   }
 
   /* ================================================================
@@ -541,6 +551,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (D.iconPlay) D.iconPlay.style.display = State.isPlaying ? 'none' : 'block';
     if (D.iconPause) D.iconPause.style.display = State.isPlaying ? 'block' : 'none';
     if (D.playerCard) D.playerCard.classList.toggle('playing', State.isPlaying);
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = State.isPlaying ? 'playing' : 'paused';
+    }
   }
 
   function playPrevBriefing() {
@@ -558,6 +571,45 @@ document.addEventListener('DOMContentLoaded', () => {
     if (idx > 0) {
       renderDigest(State.history[idx - 1]);
       togglePlay(true);
+    }
+  }
+
+  /* ================================================================
+   * MediaSession API (Lock Screen & Hardware Key Controls)
+   * ================================================================ */
+  function setupMediaSessionHandlers() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.setActionHandler('play', () => togglePlay(true));
+      navigator.mediaSession.setActionHandler('pause', () => togglePlay(false));
+      navigator.mediaSession.setActionHandler('previoustrack', () => playPrevBriefing());
+      navigator.mediaSession.setActionHandler('nexttrack', () => playNextBriefing());
+      navigator.mediaSession.setActionHandler('seekbackward', details => {
+        if (D.audioElement) D.audioElement.currentTime = Math.max(D.audioElement.currentTime - (details.seekOffset || 10), 0);
+      });
+      navigator.mediaSession.setActionHandler('seekforward', details => {
+        if (D.audioElement) D.audioElement.currentTime = Math.min(D.audioElement.currentTime + (details.seekOffset || 10), D.audioElement.duration || 0);
+      });
+    } catch (err) {
+      console.warn('MediaSession setup failed:', err);
+    }
+  }
+
+  function updateMediaSession(digest, dateStr) {
+    if (!('mediaSession' in navigator) || !digest) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: digest.custom_prompt || 'OmniDigest Daily Intelligence Briefing',
+        artist: 'OmniDigest · Qwen 2.5 (1.5B) Local',
+        album: dateStr || digest.date || 'Homelab Audio',
+        artwork: [
+          { src: '/static/omnidigest.svg', sizes: '192x192', type: 'image/svg+xml' },
+          { src: '/static/omnidigest.svg', sizes: '512x512', type: 'image/svg+xml' }
+        ]
+      });
+      navigator.mediaSession.playbackState = State.isPlaying ? 'playing' : 'paused';
+    } catch (err) {
+      console.warn('MediaSession metadata update failed:', err);
     }
   }
 
@@ -621,6 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
       D.audioElement.src = audioSrc;
       D.audioElement.load();
       D.audioElement.playbackRate = SPEEDS[State.speedIdx];
+      updateMediaSession(digest, dateStr);
     }
     if (D.btnActionDownload) {
       if (audioSrc) {
@@ -1005,6 +1058,284 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ================================================================
+   * Command Palette (Cmd+K / Ctrl+K) Spotlight System
+   * ================================================================ */
+  const SYSTEM_COMMANDS = [
+    {
+      id: 'cmd-generate',
+      title: 'Synthesize Executive Briefing',
+      desc: 'Crawl all feeds, synthesize with local Qwen 2.5 SLM & render audio',
+      icon: '✦',
+      shortcut: '↵',
+      action: () => {
+        closeCmdK();
+        synthesize();
+      }
+    },
+    {
+      id: 'cmd-theme',
+      title: 'Toggle Theme (Light / Dark)',
+      desc: 'Switch between Porcelain Light and Obsidian Dark editorial palettes',
+      icon: '🌓',
+      shortcut: 'T',
+      action: () => {
+        closeCmdK();
+        toggleTheme();
+      }
+    },
+    {
+      id: 'cmd-play',
+      title: 'Play / Pause Briefing Audio',
+      desc: 'Toggle speech playback of currently selected edition',
+      icon: '▶',
+      shortcut: 'Space',
+      action: () => {
+        closeCmdK();
+        togglePlay();
+      }
+    },
+    {
+      id: 'cmd-next',
+      title: 'Next Briefing Edition',
+      desc: 'Skip forward to the next historical briefing',
+      icon: '⏭',
+      shortcut: 'N',
+      action: () => {
+        closeCmdK();
+        playNextBriefing();
+      }
+    },
+    {
+      id: 'cmd-prev',
+      title: 'Previous Briefing Edition',
+      desc: 'Skip backward to the previous briefing',
+      icon: '⏮',
+      shortcut: 'P',
+      action: () => {
+        closeCmdK();
+        playPrevBriefing();
+      }
+    },
+    {
+      id: 'cmd-live',
+      title: 'Open Live RSS News Wire',
+      desc: 'Browse raw uncached articles across all active intelligence feeds',
+      icon: '📡',
+      shortcut: 'L',
+      action: () => {
+        closeCmdK();
+        if (D.btnLiveNews) D.btnLiveNews.click();
+      }
+    },
+    {
+      id: 'cmd-archive',
+      title: 'Browse Briefing Archive Drawer',
+      desc: 'Search, manage, and playback historical briefings',
+      icon: '🗄️',
+      shortcut: 'A',
+      action: () => {
+        closeCmdK();
+        if (D.btnArchiveDrawer) D.btnArchiveDrawer.click();
+      }
+    },
+    {
+      id: 'cmd-feeds',
+      title: 'Configure RSS Feed Sources',
+      desc: 'Inspect or update homelab crawler subscriptions',
+      icon: '⚙️',
+      shortcut: 'F',
+      action: () => {
+        closeCmdK();
+        if (D.btnFeeds) D.btnFeeds.click();
+      }
+    },
+    {
+      id: 'cmd-focus-all',
+      title: 'Focus: All Intelligence',
+      desc: 'Synthesize across all homelab feeds without category restriction',
+      icon: '🔥',
+      shortcut: '',
+      action: () => {
+        closeCmdK();
+        triggerPresetFocus('');
+      }
+    },
+    {
+      id: 'cmd-focus-ai',
+      title: 'Focus: AI & Machine Learning',
+      desc: 'Prioritize frontier LLM models, local inference, and AI research',
+      icon: '✦',
+      shortcut: '',
+      action: () => {
+        closeCmdK();
+        triggerPresetFocus('AI & LLMs');
+      }
+    },
+    {
+      id: 'cmd-focus-dev',
+      title: 'Focus: Dev, Linux & Homelab Infra',
+      desc: 'Filter articles covering self-hosting, Docker, kernel, and DevOps',
+      icon: '💻',
+      shortcut: '',
+      action: () => {
+        closeCmdK();
+        triggerPresetFocus('Dev & Infra');
+      }
+    },
+    {
+      id: 'cmd-focus-markets',
+      title: 'Focus: Markets & Macro Tech',
+      desc: 'Focus briefing on venture capital, semiconductors, and economics',
+      icon: '📈',
+      shortcut: '',
+      action: () => {
+        closeCmdK();
+        triggerPresetFocus('Markets');
+      }
+    },
+    {
+      id: 'cmd-focus-security',
+      title: 'Focus: Security & Vulnerabilities',
+      desc: 'Prioritize CVEs, zero-days, breaches, and defensive advisories',
+      icon: '🛡️',
+      shortcut: '',
+      action: () => {
+        closeCmdK();
+        triggerPresetFocus('Security');
+      }
+    },
+    {
+      id: 'cmd-copy',
+      title: 'Copy Strategic Executive Memo',
+      desc: 'Copy current briefing markdown report to clipboard',
+      icon: '📋',
+      shortcut: '',
+      action: () => {
+        closeCmdK();
+        if (D.btnActionCopy) D.btnActionCopy.click();
+      }
+    }
+  ];
+
+  function triggerPresetFocus(focusValue) {
+    if (!D.chips) return;
+    D.chips.forEach(chip => {
+      if (chip.dataset.focus === focusValue) {
+        chip.click();
+      }
+    });
+  }
+
+  function openCmdK() {
+    closeAllOverlays();
+    if (!D.cmdKModal) return;
+    D.cmdKModal.classList.add('active');
+    State.cmdKIndex = 0;
+    if (D.cmdKInput) {
+      D.cmdKInput.value = '';
+      setTimeout(() => D.cmdKInput.focus(), 50);
+    }
+    renderCmdK('');
+  }
+
+  function closeCmdK() {
+    if (D.cmdKModal) D.cmdKModal.classList.remove('active');
+    if (D.cmdKInput) D.cmdKInput.blur();
+  }
+
+  function renderCmdK(query = '') {
+    if (!D.cmdKResults) return;
+    const q = (query || '').trim().toLowerCase();
+
+    // Filter commands
+    const matchingCmds = SYSTEM_COMMANDS.filter(cmd =>
+      !q || cmd.title.toLowerCase().includes(q) || cmd.desc.toLowerCase().includes(q)
+    );
+
+    // Filter historical editions
+    const matchingEditions = (State.history || []).filter(h => {
+      if (!q) return false;
+      const title = h.custom_prompt || 'Executive Briefing';
+      const date = h.date || '';
+      return title.toLowerCase().includes(q) || date.toLowerCase().includes(q);
+    }).slice(0, 5).map(h => ({
+      id: `edition-${h.id}`,
+      title: h.custom_prompt || 'Executive Briefing',
+      desc: `${h.date || 'Past Edition'} · ${h.articles_count || 0} stories`,
+      icon: '🎙️',
+      shortcut: 'jump',
+      action: () => {
+        closeCmdK();
+        renderDigest(h);
+        togglePlay(true);
+      }
+    }));
+
+    const allItems = [...matchingCmds, ...matchingEditions];
+    State.cmdKFilteredItems = allItems;
+
+    if (allItems.length === 0) {
+      D.cmdKResults.innerHTML = `
+        <div class="cmd-k-empty">
+          <p>No actions or briefings match "<strong>${escapeHtml(q)}</strong>"</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Clamp index
+    if (State.cmdKIndex >= allItems.length) State.cmdKIndex = 0;
+
+    let html = '';
+    if (matchingCmds.length > 0) {
+      html += '<div class="cmd-k-group-title">Commands & Actions</div>';
+      matchingCmds.forEach((item, idx) => {
+        const isAct = idx === State.cmdKIndex;
+        html += renderCmdKItemHtml(item, idx, isAct);
+      });
+    }
+
+    if (matchingEditions.length > 0) {
+      html += '<div class="cmd-k-group-title">Historical Briefings</div>';
+      matchingEditions.forEach((item, idx) => {
+        const globalIdx = matchingCmds.length + idx;
+        const isAct = globalIdx === State.cmdKIndex;
+        html += renderCmdKItemHtml(item, globalIdx, isAct);
+      });
+    }
+
+    D.cmdKResults.innerHTML = html;
+
+    const activeEl = D.cmdKResults.querySelector('.cmd-k-item.active');
+    if (activeEl) {
+      activeEl.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function renderCmdKItemHtml(item, idx, isActive) {
+    return `
+      <div class="cmd-k-item ${isActive ? 'active' : ''}" data-cmd-idx="${idx}">
+        <div class="cmd-k-item-left">
+          <span class="cmd-k-item-icon">${item.icon}</span>
+          <div class="cmd-k-item-info">
+            <span class="cmd-k-item-title">${escapeHtml(item.title)}</span>
+            <span class="cmd-k-item-desc">${escapeHtml(item.desc)}</span>
+          </div>
+        </div>
+        <div class="cmd-k-item-right">
+          ${item.shortcut ? `<span class="cmd-k-shortcut">${escapeHtml(item.shortcut)}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function executeCmdKItem(idx) {
+    if (State.cmdKFilteredItems && State.cmdKFilteredItems[idx]) {
+      State.cmdKFilteredItems[idx].action();
+    }
+  }
+
+  /* ================================================================
    * Event Listeners & Shortcuts
    * ================================================================ */
   function initEventListeners() {
@@ -1026,6 +1357,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Global Keyboard Shortcuts
     document.addEventListener('keydown', e => {
+      // Cmd+K or Ctrl+K Command Palette Spotlight
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (D.cmdKModal && D.cmdKModal.classList.contains('active')) {
+          closeCmdK();
+        } else {
+          openCmdK();
+        }
+        return;
+      }
+
       if (e.key === 'Escape') {
         closeAllOverlays();
         return;
@@ -1056,10 +1398,61 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // Command Palette Event Listeners
+    if (D.btnCmdK) {
+      D.btnCmdK.addEventListener('click', () => {
+        if (D.cmdKModal && D.cmdKModal.classList.contains('active')) {
+          closeCmdK();
+        } else {
+          openCmdK();
+        }
+      });
+    }
+
+    if (D.cmdKInput) {
+      D.cmdKInput.addEventListener('input', e => {
+        State.cmdKIndex = 0;
+        renderCmdK(e.target.value);
+      });
+
+      D.cmdKInput.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (State.cmdKFilteredItems && State.cmdKFilteredItems.length > 0) {
+            State.cmdKIndex = (State.cmdKIndex + 1) % State.cmdKFilteredItems.length;
+            renderCmdK(D.cmdKInput.value);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (State.cmdKFilteredItems && State.cmdKFilteredItems.length > 0) {
+            State.cmdKIndex = (State.cmdKIndex - 1 + State.cmdKFilteredItems.length) % State.cmdKFilteredItems.length;
+            renderCmdK(D.cmdKInput.value);
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          executeCmdKItem(State.cmdKIndex);
+        } else if (e.key === 'Escape') {
+          closeCmdK();
+        }
+      });
+    }
+
+    if (D.cmdKResults) {
+      D.cmdKResults.addEventListener('click', e => {
+        const item = e.target.closest('.cmd-k-item');
+        if (item && item.dataset.cmdIdx !== undefined) {
+          executeCmdKItem(parseInt(item.dataset.cmdIdx, 10));
+        }
+      });
+    }
+
     // Close overlays on background click
     document.querySelectorAll('.modal-overlay').forEach(modal => {
       modal.addEventListener('click', e => {
-        if (e.target === modal) modal.classList.remove('active');
+        if (e.target === modal) {
+          modal.classList.remove('active');
+          if (modal === D.cmdKModal) closeCmdK();
+        }
       });
     });
 

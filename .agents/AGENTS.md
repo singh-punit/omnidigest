@@ -81,7 +81,7 @@ Small language models (e.g. Qwen 2.5 1.5B) occasionally produce malformed JSON s
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/health` | `GET` | Health check returning status, service name, version (`2.2.0`), LLM endpoint, and scheduler state. |
+| `/health` | `GET` | Health check returning status, service name, version (`2.5.0`), LLM endpoint, and scheduler state. |
 | `/api/info` | `GET` | Service capabilities, model name, and TTS engine metadata. |
 | `/api/scheduler/status` | `GET` | Returns scheduler running status, last run date, and next trigger time. |
 | `/api/news/live` | `GET` | **On-demand live crawler**. Fetches real-time RSS articles across all feeds immediately with `max_items` query param. |
@@ -98,6 +98,9 @@ Small language models (e.g. Qwen 2.5 1.5B) occasionally produce malformed JSON s
 
 ## 🎨 UI Guidelines & Universal UX Contract
 
+- **Spotlight Command Palette (MANDATORY)**: Pressing <kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd> or clicking `#btn-cmd-k` opens a spotlight search overlay allowing immediate zero-mouse action execution, preset switching, and direct jumping to past briefing editions.
+- **Hardware & Lock Screen Audio Control (MANDATORY)**: `navigator.mediaSession` synchronization connects playback, track switching, and scrubber seeking directly to OS lock screens, control centers, and hardware media keys.
+- **Progressive Web App (PWA) Standalone**: `manifest.json` and adaptive theme colors support home-screen app installation on iOS/Android/macOS without browser chrome.
 - **Clickable Brand Logo Home Return (MANDATORY)**: Clicking `#brand-home-link` resets the view to the latest briefing, clears search/focus inputs, and smoothly scrolls to `top: 0`.
 - **Editorial Dual-Theme System (MANDATORY)**:
   - Default: **Porcelain (Light Mode)** — Crisp editorial off-white (`#f8fafc`), deep slate typography (`#0f172a`), subtle slate borders (`#e2e8f0`), and soft shadows.
@@ -108,7 +111,7 @@ Small language models (e.g. Qwen 2.5 1.5B) occasionally produce malformed JSON s
   - Robot emojis/icons (`🤖`) are strictly banned across all titles, badges, and documentation.
   - All AI attribution badges must include an animated pulsing emerald status indicator (`.ai-pulse-dot`) and glassmorphic pill background.
 - **Static Asset Cache-Busting & Zero-Stale Invariant (MANDATORY)**:
-  - All static asset references (`app.js`, `style.css`) in HTML must include version query parameters (`?v=...`), and backend servers must send `Cache-Control: no-cache, no-store, must-revalidate, max-age=0`.
+  - All static asset references (`app.js`, `style.css`) in HTML must include version query parameters (`?v=2.5.0`), and backend servers must send `Cache-Control: no-cache, no-store, must-revalidate, max-age=0`.
   - Code changes to containerized apps must be synced directly to `/srv/omnidigest/` on `192.168.0.65` with container restart in addition to git commits.
 - **ESC Key Handling (MANDATORY)**: Pressing the ESC key must close all modal overlays and side drawers.
 - **On-Demand Intelligence Studio Bar**:

@@ -1,5 +1,4 @@
 import os
-import json
 import time
 import logging
 import asyncio
@@ -13,6 +12,23 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 import httpx
 import anyio
+
+try:
+    import orjson
+    def dump_json_bytes(obj: Any) -> bytes:
+        return orjson.dumps(obj)
+    def load_json_bytes(data: bytes | str) -> Any:
+        return orjson.loads(data)
+    from fastapi.responses import ORJSONResponse as DefaultResponseClass
+except ImportError:
+    import json
+    def dump_json_bytes(obj: Any) -> bytes:
+        return json.dumps(obj, separators=(',', ':')).encode('utf-8')
+    def load_json_bytes(data: bytes | str) -> Any:
+        if isinstance(data, bytes):
+            return json.loads(data.decode('utf-8'))
+        return json.loads(data)
+    from fastapi.responses import JSONResponse as DefaultResponseClass
 
 from app.crawler import crawl_all_feeds, DEFAULT_FEEDS
 from app.synthesizer import synthesize_digest, clean_synthesized_text, LLM_MODEL, LLM_API_BASE
@@ -123,11 +139,11 @@ async def lifespan(app: FastAPI):
     flusher_task.cancel()
     
     if _digests_dirty:
-        with open(DIGESTS_FILE, "w") as f:
-            f.write(json.dumps(_digests_cache, separators=(',', ':')))
+        with open(DIGESTS_FILE, "wb") as f:
+            f.write(dump_json_bytes(_digests_cache))
     if _feeds_dirty:
-        with open(FEEDS_FILE, "w") as f:
-            f.write(json.dumps(_feeds_cache, separators=(',', ':')))
+        with open(FEEDS_FILE, "wb") as f:
+            f.write(dump_json_bytes(_feeds_cache))
             
     if shared_client:
         await shared_client.aclose()
@@ -135,7 +151,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="OmniDigest",
     description="Autonomous Homelab Intelligence & Audio Briefing Engine",
-    lifespan=lifespan
+    lifespan=lifespan,
+    default_response_class=DefaultResponseClass
 )
 
 app.add_middleware(
@@ -182,24 +199,38 @@ _feeds_dirty = False
 
 async def disk_flusher_loop():
     global _digests_dirty, _feeds_dirty
+    loops = 0
     while scheduler_state["running"]:
         await asyncio.sleep(30)
+        loops += 1
         if _digests_dirty:
-            data = json.dumps(_digests_cache, separators=(',', ':'))
-            await anyio.Path(DIGESTS_FILE).write_text(data)
+            data = dump_json_bytes(_digests_cache)
+            await anyio.Path(DIGESTS_FILE).write_bytes(data)
             _digests_dirty = False
         if _feeds_dirty:
-            data = json.dumps(_feeds_cache, separators=(',', ':'))
-            await anyio.Path(FEEDS_FILE).write_text(data)
+            data = dump_json_bytes(_feeds_cache)
+            await anyio.Path(FEEDS_FILE).write_bytes(data)
             _feeds_dirty = False
+            
+        # Prune orphaned audio every ~10 minutes
+        if loops % 20 == 0:
+            active_mp3s = {item.get("audio_file") for item in _digests_cache if item.get("audio_file")}
+            if os.path.exists(PODCAST_DIR):
+                for f in os.listdir(PODCAST_DIR):
+                    if f.endswith(".mp3") and f not in active_mp3s:
+                        try:
+                            os.remove(os.path.join(PODCAST_DIR, f))
+                            logger.info(f"Pruned orphaned audio: {f}")
+                        except Exception as e:
+                            logger.error(f"Failed to delete {f}: {e}")
 
 def load_digests() -> List[Dict[str, Any]]:
     global _digests_cache
     if _digests_cache is None:
         if os.path.exists(DIGESTS_FILE):
             try:
-                with open(DIGESTS_FILE, "r") as f:
-                    _digests_cache = json.load(f)
+                with open(DIGESTS_FILE, "rb") as f:
+                    _digests_cache = load_json_bytes(f.read())
                     for item in _digests_cache:
                         if isinstance(item, dict) and "markdown_report" in item:
                             item["markdown_report"] = clean_synthesized_text(str(item["markdown_report"]))
@@ -219,8 +250,8 @@ def load_feeds() -> List[Dict[str, Any]]:
     if _feeds_cache is None:
         if os.path.exists(FEEDS_FILE):
             try:
-                with open(FEEDS_FILE, "r") as f:
-                    _feeds_cache = json.load(f)
+                with open(FEEDS_FILE, "rb") as f:
+                    _feeds_cache = load_json_bytes(f.read())
             except Exception:
                 _feeds_cache = DEFAULT_FEEDS
         else:
@@ -317,7 +348,7 @@ async def health():
     return {
         "status": "ok",
         "service": "omnidigest",
-        "version": "2.2.0",
+        "version": "2.5.0",
         "llm_model": "Qwen 2.5 (1.5B)",
         "llm_endpoint": LLM_API_BASE,
         "scheduler": scheduler_state
@@ -327,7 +358,7 @@ async def health():
 async def get_info():
     return {
         "service": "OmniDigest",
-        "version": "2.2.0",
+        "version": "2.5.0",
         "llm_model": "Qwen 2.5 (1.5B)",
         "llm_type": "Local SLM",
         "llm_endpoint": LLM_API_BASE,
