@@ -27,7 +27,7 @@ OmniDigest autonomously crawls top tech, AI research (arXiv), cyber security, fi
 docker compose up -d --build
 ```
 
-Access the dashboard at `http://192.168.0.65:8099` (or `http://localhost:8080`).
+Access the dashboard via the homelab Sleepproxy at `http://192.168.0.65:20203` (or directly via bypass port `http://192.168.0.65:20253`).
 
 ---
 

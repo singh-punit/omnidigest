@@ -95,9 +95,10 @@ async def autonomous_scheduler_loop():
         now = datetime.now()
         today_str = now.strftime("%Y%m%d")
         
-        # Check if it's scheduled daily trigger time
-        if now.hour == SCHEDULE_HOUR and now.minute == SCHEDULE_MINUTE and scheduler_state["last_run_date"] != today_str:
-            logger.info(f"Triggering scheduled daily morning briefing for {today_str}...")
+        # Check if it's scheduled daily trigger time (or if we missed it while sleeping)
+        time_to_run = now.hour > SCHEDULE_HOUR or (now.hour == SCHEDULE_HOUR and now.minute >= SCHEDULE_MINUTE)
+        if time_to_run and scheduler_state["last_run_date"] != today_str:
+            logger.info(f"Triggering daily morning briefing for {today_str} (Catch-up/Scheduled)...")
             scheduler_state["last_status"] = f"Running scheduled daily briefing for {today_str}..."
             try:
                 await run_digest_pipeline(

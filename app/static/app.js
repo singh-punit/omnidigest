@@ -67,7 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
     audioElement:        $('audio-element'),
     briefDate:           $('brief-date'),
     briefDateBadge:      $('brief-date-badge'),
-    briefModelTag:       $('brief-model-tag'),
     playerTitle:         $('player-title'),
 
     // Action Ribbon
@@ -274,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const current = document.documentElement.getAttribute('data-theme') || 'light';
     const next = current === 'light' ? 'dark' : 'light';
     applyTheme(next);
-    showToast(next === 'light' ? '☀️ Porcelain Light Mode' : '🌙 Obsidian Dark Mode');
+    showToast(next === 'light' ? 'Porcelain Light Mode' : 'Obsidian Dark Mode');
   }
 
   /* ================================================================
@@ -527,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
    * ================================================================ */
   function togglePlay(forcePlay = false) {
     if (!D.audioElement || !D.audioElement.src || D.audioElement.src === location.href) {
-      showToast('🎙️ No briefing loaded yet. Synthesize above.');
+      showToast('No briefing loaded yet. Synthesize above.');
       return;
     }
     initWebAudio();
@@ -660,11 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (D.briefDate) D.briefDate.textContent = dateStr;
     const isLatest = State.history.length > 0 && digest.id === State.history[0].id;
-    if (D.briefDateBadge) D.briefDateBadge.textContent = isLatest ? 'CURRENT EDITION' : 'ARCHIVED EDITION';
-    if (D.briefModelTag) {
-      const cleanModel = (digest.model_used || 'Qwen 2.5 (1.5B) · Local').replace(/^[🤖✦\s]+/, '');
-      D.briefModelTag.innerHTML = `<span class="ai-pulse-dot"></span>✦ ${escapeHtml(cleanModel)}`;
-    }
+    if (D.briefDateBadge) D.briefDateBadge.textContent = isLatest ? 'Current Edition' : 'Archived Edition';
     if (D.playerTitle) D.playerTitle.textContent = digest.custom_prompt || 'OmniDigest Executive Briefing';
 
     // Audio Setup (Use relative URL so it plays seamlessly across LAN, Tailscale, Cloudflare)
@@ -704,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (digest.markdown_report) {
         D.markdownContent.innerText = digest.markdown_report;
       } else {
-        D.markdownContent.innerHTML = `<div class="welcome-empty"><h3>🎙️ Welcome to OmniDigest</h3><p>Click play or hit <kbd>Enter</kbd> to synthesize your first briefing.</p></div>`;
+        D.markdownContent.innerHTML = `<div class="welcome-empty"><h3>Welcome to OmniDigest</h3><p>Click play or hit <kbd>Enter</kbd> to synthesize your first briefing.</p></div>`;
       }
     }
 
@@ -747,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!D.btnActionPin) return;
     if (pinned) {
       D.btnActionPin.classList.add('pinned');
-      D.btnActionPin.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span class="act-label">Starred ⭐</span>`;
+      D.btnActionPin.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span class="act-label">Pinned</span>`;
     } else {
       D.btnActionPin.classList.remove('pinned');
       D.btnActionPin.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span class="act-label">Pin</span>`;
@@ -776,7 +771,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="history-strip-card ${isActive ? 'active-playing-card active' : ''}" data-id="${item.id}" data-idx="${idx}">
           <div class="strip-card-thumb">
             <img src="/static/omnidigest.svg" alt="Cover">
-            <span class="strip-badge-top-left">${item.pinned ? '⭐' : '#' + (idx + 1)}</span>
+            <span class="strip-badge-top-left">${item.pinned ? '★' : '#' + (idx + 1)}</span>
             <span class="strip-badge-top-right">${item.articles_count || 0} src</span>
             <div class="strip-card-equalizer-overlay ${isPlaying ? 'always-active on' : ''}">
               <div class="eq-bar"></div>
@@ -845,10 +840,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return `
         <div class="arch-card ${isActive ? 'is-active' : ''}" data-id="${item.id}">
           <div class="arch-actions">
-            <button class="arch-act arch-pin" data-id="${item.id}" title="Pin/Star">${item.pinned ? '⭐' : '☆'}</button>
-            <button class="arch-act arch-del" data-id="${item.id}" title="Delete Briefing">🗑️</button>
+            <button class="arch-act arch-pin" data-id="${item.id}" title="Pin/Star">${item.pinned ? '★' : '☆'}</button>
+            <button class="arch-act arch-del" data-id="${item.id}" title="Delete Briefing"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
-          <div class="arch-date">${escapeHtml(dateStr)} ${item.pinned ? '⭐' : ''}</div>
+          <div class="arch-date">${escapeHtml(dateStr)} ${item.pinned ? '★' : ''}</div>
           <div class="arch-prompt">${escapeHtml(item.custom_prompt || 'Daily Autonomous Digest')}</div>
           <div class="arch-meta"><span>${item.articles_count || 0} articles</span> · <span>${item.model_used || 'Qwen 2.5'}</span></div>
         </div>
@@ -882,7 +877,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           renderArchiveList();
           renderRecentStrip();
-          showToast(res.pinned ? '⭐ Briefing pinned' : '☆ Briefing unpinned');
+          showToast(res.pinned ? 'Briefing pinned' : 'Briefing unpinned');
         }
       });
     });
@@ -900,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderArchiveList();
         renderRecentStrip();
-        showToast('🗑️ Briefing deleted');
+        showToast('Briefing deleted');
       });
     });
 
@@ -1015,8 +1010,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const steps = [
       { text: '📡 Crawling homelab RSS sources...', pct: 18 },
       { text: '✦ Synthesizing with Qwen 2.5 (1.5B)...', pct: 48 },
-      { text: '✍️ Structuring executive intelligence memo...', pct: 70 },
-      { text: '🎙️ Generating Edge Neural TTS audio broadcast...', pct: 88 },
+      { text: 'Structuring executive intelligence memo...', pct: 70 },
+      { text: 'Generating Edge Neural TTS audio broadcast...', pct: 88 },
       { text: '📦 Finalizing audio briefing...', pct: 96 },
     ];
     let stepIdx = 0;
@@ -1131,7 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-archive',
       title: 'Browse Briefing Archive Drawer',
       desc: 'Search, manage, and playback historical briefings',
-      icon: '🗄️',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
       shortcut: 'A',
       action: () => {
         closeCmdK();
@@ -1142,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-feeds',
       title: 'Configure RSS Feed Sources',
       desc: 'Inspect or update homelab crawler subscriptions',
-      icon: '⚙️',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
       shortcut: 'F',
       action: () => {
         closeCmdK();
@@ -1153,7 +1148,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-focus-all',
       title: 'Focus: All Intelligence',
       desc: 'Synthesize across all homelab feeds without category restriction',
-      icon: '🔥',
+      icon: '★',
       shortcut: '',
       action: () => {
         closeCmdK();
@@ -1175,7 +1170,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-focus-dev',
       title: 'Focus: Dev, Linux & Homelab Infra',
       desc: 'Filter articles covering self-hosting, Docker, kernel, and DevOps',
-      icon: '💻',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
       shortcut: '',
       action: () => {
         closeCmdK();
@@ -1186,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-focus-markets',
       title: 'Focus: Markets & Macro Tech',
       desc: 'Focus briefing on venture capital, semiconductors, and economics',
-      icon: '📈',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
       shortcut: '',
       action: () => {
         closeCmdK();
@@ -1197,7 +1192,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-focus-security',
       title: 'Focus: Security & Vulnerabilities',
       desc: 'Prioritize CVEs, zero-days, breaches, and defensive advisories',
-      icon: '🛡️',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
       shortcut: '',
       action: () => {
         closeCmdK();
@@ -1208,7 +1203,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: 'cmd-copy',
       title: 'Copy Strategic Executive Memo',
       desc: 'Copy current briefing markdown report to clipboard',
-      icon: '📋',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
       shortcut: '',
       action: () => {
         closeCmdK();
@@ -1262,7 +1257,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: `edition-${h.id}`,
       title: h.custom_prompt || 'Executive Briefing',
       desc: `${h.date || 'Past Edition'} · ${h.articles_count || 0} stories`,
-      icon: '🎙️',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>',
       shortcut: 'jump',
       action: () => {
         closeCmdK();
@@ -1604,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const hi = State.history.find(h => String(h.id) === String(State.currentDigest.id));
           if (hi) hi.pinned = res.pinned;
           renderRecentStrip();
-          showToast(res.pinned ? '⭐ Briefing pinned' : '☆ Briefing unpinned');
+          showToast(res.pinned ? 'Briefing pinned' : 'Briefing unpinned');
         }
       });
     }

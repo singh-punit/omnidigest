@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.5.0">
+  <link rel="stylesheet" href="/static/style.css?v=2.6.0">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -94,12 +94,12 @@
 
       <!-- Topic Chips -->
       <div class="topic-chips">
-        <button class="chip active" data-focus="">🔥 All Intel</button>
+        <button class="chip active" data-focus="">All Intel</button>
         <button class="chip" data-focus="AI, LLMs, Neural Networks, and Machine Learning research breakthroughs">✦ AI & LLMs</button>
-        <button class="chip" data-focus="Cloud infrastructure, developer tooling, databases, and Linux systems">💻 Dev & Infra</button>
-        <button class="chip" data-focus="Tech markets, venture funding, acquisitions, and fintech">📈 Markets</button>
-        <button class="chip" data-focus="Cybersecurity vulnerabilities, zero-days, and enterprise privacy">🛡️ Security</button>
-        <button class="chip" data-focus="ArXiv research papers, algorithmic advances, and novel model architectures">🚀 ArXiv Research</button>
+        <button class="chip" data-focus="Cloud infrastructure, developer tooling, databases, and Linux systems">Dev & Infra</button>
+        <button class="chip" data-focus="Tech markets, venture funding, acquisitions, and fintech">Markets</button>
+        <button class="chip" data-focus="Cybersecurity vulnerabilities, zero-days, and enterprise privacy">Security</button>
+        <button class="chip" data-focus="ArXiv research papers, algorithmic advances, and novel model architectures">ArXiv Research</button>
       </div>
 
       <!-- Live Generation Progress -->
@@ -117,7 +117,7 @@
 
     <!-- Error Banner -->
     <div id="error-card" class="error-banner" style="display:none;">
-      <span class="error-icon">⚠️</span>
+      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       <div class="error-text">
         <span id="error-title" class="error-title">Error</span>
         <span id="error-message" class="error-msg">Something went wrong.</span>
@@ -140,11 +140,10 @@
             <div class="art-glow"></div>
           </div>
           <div class="player-meta">
-            <div class="meta-tags">
-              <span class="tag tag-edition" id="brief-date-badge">CURRENT EDITION</span>
-              <span class="tag tag-model" id="brief-model-tag"><span class="ai-pulse-dot"></span>✦ Qwen 2.5 (1.5B) · Local</span>
+            <div class="player-headline-row">
+              <h2 id="brief-date" class="player-date">Loading briefing...</h2>
+              <span class="tag-edition" id="brief-date-badge">Current Edition</span>
             </div>
-            <h2 id="brief-date" class="player-date">Loading briefing...</h2>
             <p id="player-title" class="player-subtitle">OmniDigest Executive Briefing</p>
           </div>
         </div>
@@ -220,7 +219,7 @@
             <h3>Recent Briefings</h3>
             <span class="strip-count-badge" id="strip-count-label">0 editions</span>
           </div>
-          <button id="btn-view-all-archive" class="btn-text-link">View All Archive &rarr;</button>
+          <button id="btn-view-all-archive" class="btn-text-link">View All Archive</button>
         </div>
 
         <div class="strip-carousel-container">
@@ -243,9 +242,18 @@
     <!-- Content Tabs Section -->
     <section class="content-tabs">
       <div class="tab-bar">
-        <button class="tab-btn active" data-tab="report">📄 Strategic Memo</button>
-        <button class="tab-btn" data-tab="transcript">🎙️ Broadcast Script</button>
-        <button class="tab-btn" data-tab="sources">🔗 Source Feed Wire</button>
+        <button class="tab-btn active" data-tab="report">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Strategic Memo
+        </button>
+        <button class="tab-btn" data-tab="transcript">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          Broadcast Script
+        </button>
+        <button class="tab-btn" data-tab="sources">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tab-icon"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Source Feed Wire
+        </button>
         <button id="btn-copy-tab-content" class="tab-copy-btn" title="Copy Current Tab Content">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
@@ -253,7 +261,7 @@
       <div id="tab-report" class="tab-pane active">
         <div id="markdown-content" class="md-body">
           <div class="welcome-empty">
-            <h3>🎙️ Welcome to OmniDigest</h3>
+            <h3>Welcome to OmniDigest</h3>
             <p>Your autonomous intelligence pipeline crawls top feeds, arXiv research, and market intelligence, synthesizing briefings via <strong>Qwen 2.5 (1.5B)</strong> and <strong>Edge Neural TTS</strong>.</p>
             <p>Click the play button above or hit <kbd>Enter</kbd> in the command bar to synthesize your briefing.</p>
           </div>
@@ -262,7 +270,7 @@
       <div id="tab-transcript" class="tab-pane">
         <div class="teleprompter">
           <div class="tele-header">
-            <span class="tele-tag">BROADCAST TELEPROMPTER SCRIPT</span>
+            <span class="tele-title">Broadcast Teleprompter Script</span>
             <span id="script-word-count" class="tele-wc">0 words</span>
           </div>
           <div id="transcript-content" class="tele-body">
@@ -282,7 +290,7 @@
   <aside id="archive-drawer" class="drawer">
     <div class="drawer-head">
       <div class="drawer-title-group">
-        <h3>📅 Briefing Archive</h3>
+        <h3>Briefing Archive</h3>
         <span id="archive-stats-sub" class="drawer-sub">0 briefings</span>
       </div>
       <button id="btn-close-archive" class="drawer-close" title="Close Archive (Esc)">&times;</button>
@@ -304,7 +312,7 @@
   <div id="cmd-k-modal" class="modal-overlay">
     <div class="modal-sheet cmd-k-sheet">
       <div class="cmd-k-input-wrap">
-        <span class="cmd-k-icon">🔍</span>
+        <svg class="cmd-k-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="cmd-k-input" placeholder="Type a command or search... (e.g. Generate, Dark Mode)" autocomplete="off" spellcheck="false">
       </div>
       <div class="cmd-k-results" id="cmd-k-results">
@@ -322,7 +330,10 @@
   <div id="live-news-modal" class="modal-overlay">
     <div class="modal-sheet modal-lg">
       <div class="modal-head">
-        <div><span class="modal-badge">LIVE INTEL</span><h2>RSS Feed Wire</h2></div>
+        <div class="modal-title-group">
+          <h2>RSS Feed Wire</h2>
+          <p class="modal-subtitle">Live incoming intelligence stream across homelab feeds</p>
+        </div>
         <div class="modal-head-actions">
           <button id="btn-refresh-live-news" class="btn-ghost">↻ Refresh Wire</button>
           <button id="modal-live-close" class="modal-close" title="Close (Esc)">&times;</button>
@@ -343,7 +354,7 @@
       </div>
       <div class="modal-foot">
         <span id="live-news-stat" class="modal-stat">0 articles</span>
-        <button id="btn-digest-visible" class="btn-accent">▶ Synthesize from Wire</button>
+        <button id="btn-digest-visible" class="btn-accent">Synthesize from Wire</button>
       </div>
     </div>
   </div>
@@ -352,7 +363,10 @@
   <div id="feeds-modal" class="modal-overlay">
     <div class="modal-sheet">
       <div class="modal-head">
-        <div><span class="modal-badge">HOMELAB PIPELINE</span><h2>RSS Feed Sources</h2></div>
+        <div class="modal-title-group">
+          <h2>RSS Feed Sources</h2>
+          <p class="modal-subtitle">Configured publication feeds and crawl pipeline endpoints</p>
+        </div>
         <button id="modal-close" class="modal-close" title="Close (Esc)">&times;</button>
       </div>
       <div class="modal-body">
@@ -370,7 +384,10 @@
   <div id="qr-modal" class="modal-overlay">
     <div class="modal-sheet modal-sm">
       <div class="modal-head">
-        <div><span class="modal-badge">MOBILE STREAMING</span><h2>Listen on Phone</h2></div>
+        <div class="modal-title-group">
+          <h2>Listen on Phone</h2>
+          <p class="modal-subtitle">Direct stream handover to your mobile device</p>
+        </div>
         <button id="modal-qr-close" class="modal-close" title="Close (Esc)">&times;</button>
       </div>
       <div class="modal-body qr-body">
@@ -387,6 +404,6 @@
   <!-- Interactive Floating Toast -->
   <div id="toast" class="toast"></div>
 
-  <script src="/static/app.js?v=2.5.0"></script>
+  <script src="/static/app.js?v=2.6.0"></script>
 </body>
 </html>
