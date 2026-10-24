@@ -1,7 +1,7 @@
 # Agent Rules (compact, LLM-facing). EN mirror: docs/AGENTS_EN.md; edit both.
 ## G0 Central Governance
 - **NO LOCAL BUGS.md OR DECISIONS.md.** All bugs, ADRs, and app registrations MUST be tracked centrally using `../optiplex-homelab/dev-registry/registry_cli.py`.
-Refs: arch .agents/KNOWLEDGE_GRAPH.md | hub ../optiplex-homelab/.agents/AGENTS.md | UI ../optiplex-homelab/docs/ANTI_SLOP_UI_UX_STANDARD.md | archive .agents/AGENTS_ARCHIVE.md.
+Refs: arch .agents/KNOWLEDGE_GRAPH.md | hub ../optiplex-homelab/.agents/AGENTS.md | UI ../optiplex-homelab/docs/ANTI_SLOP_UI_UX_STANDARD.md | mobile ../optiplex-homelab/docs/MOBILE_NATIVE_DESIGN_STANDARD.md | archive .agents/AGENTS_ARCHIVE.md.
 
 ## R1 Budget
 <=3.5KB (G7, audit-enforced). Tables/specs/changelogs -> KNOWLEDGE_GRAPH.md or AGENTS_ARCHIVE.md.
