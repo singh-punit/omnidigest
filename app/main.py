@@ -45,13 +45,39 @@ FEEDS_FILE = os.path.join(DATA_DIR, "feeds.json")
 NTFY_URL = os.getenv("NTFY_URL", "http://ntfy:80/homelab-alerts")
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://192.168.0.65:8100")
 
-# Autonomous Scheduling Configuration
+# Autonomous Scheduling & Pipeline State Configuration
 SCHEDULE_HOUR = int(os.getenv("SCHEDULE_HOUR", "7"))
 SCHEDULE_MINUTE = int(os.getenv("SCHEDULE_MINUTE", "0"))
 AUTO_GENERATE_ON_STARTUP = os.getenv("AUTO_GENERATE_ON_STARTUP", "true").lower() == "true"
 
+pipeline_lock = asyncio.Lock()
+pipeline_state = {
+    "status": "idle",
+    "phase": "System idle",
+    "progress_percent": 0,
+    "current_task_id": None,
+    "started_at": None,
+    "completed_at": None,
+    "error": None,
+    "is_busy": False
+}
+
+def set_pipeline_state(status: str, phase: str, progress: int = 0, error: Optional[str] = None, task_id: Optional[str] = None):
+    pipeline_state["status"] = status
+    pipeline_state["phase"] = phase
+    pipeline_state["progress_percent"] = progress
+    pipeline_state["is_busy"] = (status in ("crawling", "synthesizing", "generating_tts"))
+    if task_id:
+        pipeline_state["current_task_id"] = task_id
+    if status in ("crawling", "synthesizing", "generating_tts") and not pipeline_state["started_at"]:
+        pipeline_state["started_at"] = datetime.now().isoformat()
+    if status in ("completed", "error"):
+        pipeline_state["completed_at"] = datetime.now().isoformat()
+    pipeline_state["error"] = error
+
 scheduler_state = {
     "running": True,
+    "state": "initializing",
     "last_run_date": None,
     "next_scheduled_target": f"{SCHEDULE_HOUR:02d}:{SCHEDULE_MINUTE:02d}",
     "last_status": "Initializing",
@@ -65,6 +91,7 @@ async def autonomous_scheduler_loop():
     and automatically synthesizes on startup if today's edition was missed.
     """
     logger.info(f"Autonomous scheduler loop active. Daily briefing target: {SCHEDULE_HOUR:02d}:{SCHEDULE_MINUTE:02d}")
+    scheduler_state["state"] = "initializing"
     
     # Allow system & llama-server to stabilize after container start
     await asyncio.sleep(8)
@@ -76,6 +103,7 @@ async def autonomous_scheduler_loop():
         has_today = any(d.get("id", "").startswith(today_str) for d in history)
         if not has_today:
             logger.info("No briefing found for today. Executing autonomous morning synthesis...")
+            scheduler_state["state"] = "running"
             scheduler_state["last_status"] = "Generating startup daily briefing..."
             try:
                 await run_digest_pipeline(
@@ -83,13 +111,18 @@ async def autonomous_scheduler_loop():
                     send_ntfy=True
                 )
                 scheduler_state["last_run_date"] = today_str
+                scheduler_state["state"] = "idle"
                 scheduler_state["last_status"] = f"Completed morning briefing for {today_str}"
             except Exception as e:
                 logger.error(f"Startup daily briefing failed: {e}")
+                scheduler_state["state"] = "error"
                 scheduler_state["last_status"] = f"Startup briefing error: {e}"
         else:
             scheduler_state["last_run_date"] = today_str
+            scheduler_state["state"] = "idle"
             scheduler_state["last_status"] = f"Today's briefing already generated ({today_str})"
+    else:
+        scheduler_state["state"] = "idle"
 
     while scheduler_state["running"]:
         now = datetime.now()
@@ -99,6 +132,7 @@ async def autonomous_scheduler_loop():
         time_to_run = now.hour > SCHEDULE_HOUR or (now.hour == SCHEDULE_HOUR and now.minute >= SCHEDULE_MINUTE)
         if time_to_run and scheduler_state["last_run_date"] != today_str:
             logger.info(f"Triggering daily morning briefing for {today_str} (Catch-up/Scheduled)...")
+            scheduler_state["state"] = "running"
             scheduler_state["last_status"] = f"Running scheduled daily briefing for {today_str}..."
             try:
                 await run_digest_pipeline(
@@ -106,9 +140,11 @@ async def autonomous_scheduler_loop():
                     send_ntfy=True
                 )
                 scheduler_state["last_run_date"] = today_str
+                scheduler_state["state"] = "idle"
                 scheduler_state["last_status"] = f"Completed scheduled briefing for {today_str}"
             except Exception as e:
                 logger.error(f"Scheduled briefing generation failed: {e}")
+                scheduler_state["state"] = "error"
                 scheduler_state["last_status"] = f"Scheduled run error: {e}"
         
         target = now.replace(hour=SCHEDULE_HOUR, minute=SCHEDULE_MINUTE, second=0, microsecond=0)
@@ -119,6 +155,7 @@ async def autonomous_scheduler_loop():
         try:
             await asyncio.sleep(sleep_seconds)
         except asyncio.CancelledError:
+            scheduler_state["state"] = "stopped"
             break
 
 @asynccontextmanager
@@ -279,63 +316,73 @@ async def send_ntfy_alert(title: str, message: str, audio_url: str):
         logger.error(f"Failed to send Ntfy notification: {e}")
 
 async def run_digest_pipeline(custom_prompt: str = "", voice: str = "en-US-ChristopherNeural", send_ntfy: bool = True, category_filter: Optional[str] = None, speed_rate: str = "+0%"):
-    timestamp_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    display_date = datetime.now().strftime("%A, %B %d, %Y - %I:%M %p")
-    logger.info(f"Starting OmniDigest generation [{timestamp_id}] with prompt '{custom_prompt}'...")
+    async with pipeline_lock:
+        timestamp_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        display_date = datetime.now().strftime("%A, %B %d, %Y - %I:%M %p")
+        logger.info(f"Starting OmniDigest generation [{timestamp_id}] with prompt '{custom_prompt}'...")
+        set_pipeline_state("crawling", "Crawling homelab publication feeds...", 18, task_id=timestamp_id)
 
-    feeds = load_feeds()
-    articles = await crawl_all_feeds(feeds, max_items_per_feed=4, client=shared_client)
-    
-    # Optional category filtering
-    if category_filter and category_filter.lower() != "all":
-        filtered = [a for a in articles if a.get("category", "").lower() == category_filter.lower()]
-        if filtered:
-            articles = filtered
+        try:
+            feeds = load_feeds()
+            articles = await crawl_all_feeds(feeds, max_items_per_feed=4, client=shared_client)
             
-    logger.info(f"Crawled {len(articles)} articles across {len(feeds)} sources")
+            # Optional category filtering
+            if category_filter and category_filter.lower() != "all":
+                filtered = [a for a in articles if a.get("category", "").lower() == category_filter.lower()]
+                if filtered:
+                    articles = filtered
+                    
+            logger.info(f"Crawled {len(articles)} articles across {len(feeds)} sources")
 
-    markdown_report, audio_script, highlights = await synthesize_digest(articles, custom_prompt, client=shared_client)
-    
-    # Generate MP3
-    audio_filename = f"digest_{timestamp_id}.mp3"
-    audio_url = f"{PUBLIC_BASE_URL}/podcasts/{audio_filename}"
-    try:
-        await generate_audio_podcast(audio_script, audio_filename, voice=voice, rate=speed_rate)
-    except Exception as e:
-        logger.error(f"TTS synthesis failed: {e}")
-        audio_url = ""
+            set_pipeline_state("synthesizing", "Synthesizing executive briefing with local SLM Qwen 2.5 (1.5B)...", 48, task_id=timestamp_id)
+            markdown_report, audio_script, highlights = await synthesize_digest(articles, custom_prompt, client=shared_client)
+            
+            # Generate MP3
+            set_pipeline_state("generating_tts", "Synthesizing Edge Neural broadcast audio...", 82, task_id=timestamp_id)
+            audio_filename = f"digest_{timestamp_id}.mp3"
+            audio_url = f"{PUBLIC_BASE_URL}/podcasts/{audio_filename}"
+            try:
+                await generate_audio_podcast(audio_script, audio_filename, voice=voice, rate=speed_rate)
+            except Exception as e:
+                logger.error(f"TTS synthesis failed: {e}")
+                audio_url = ""
 
-    digest_entry = {
-        "id": timestamp_id,
-        "date": display_date,
-        "model_used": "Qwen 2.5 (1.5B) [Local SLM]",
-        "articles_count": len(articles),
-        "highlights": highlights,
-        "markdown_report": markdown_report,
-        "audio_script": audio_script,
-        "audio_url": audio_url,
-        "audio_file": audio_filename,
-        "sources": [{"title": a["title"], "source": a["source"], "link": a["link"], "category": a.get("category", "tech")} for a in articles[:8]],
-        "created_at": time.time(),
-        "pinned": False
-    }
+            digest_entry = {
+                "id": timestamp_id,
+                "date": display_date,
+                "model_used": "Qwen 2.5 (1.5B) [Local SLM]",
+                "articles_count": len(articles),
+                "highlights": highlights,
+                "markdown_report": markdown_report,
+                "audio_script": audio_script,
+                "audio_url": audio_url,
+                "audio_file": audio_filename,
+                "sources": [{"title": a["title"], "source": a["source"], "link": a["link"], "category": a.get("category", "tech")} for a in articles[:8]],
+                "created_at": time.time(),
+                "pinned": False
+            }
 
-    history = load_digests()
-    history.insert(0, digest_entry)
-    
-    # Prune past 40 items while keeping ALL pinned/starred briefings
-    pinned = [item for item in history if item.get("pinned", False)]
-    unpinned = [item for item in history if not item.get("pinned", False)]
-    history = pinned + unpinned[:30]
-    # Sort history so newest is always first
-    history.sort(key=lambda x: x.get("id", ""), reverse=True)
-    save_digests(history)
+            history = load_digests()
+            history.insert(0, digest_entry)
+            
+            # Prune past 40 items while keeping ALL pinned/starred briefings
+            pinned = [item for item in history if item.get("pinned", False)]
+            unpinned = [item for item in history if not item.get("pinned", False)]
+            history = pinned + unpinned[:30]
+            # Sort history so newest is always first
+            history.sort(key=lambda x: x.get("id", ""), reverse=True)
+            save_digests(history)
 
-    if send_ntfy and audio_url:
-        short_msg = " • " + "\n • ".join(highlights[:3]) if highlights else "Your morning executive briefing is ready."
-        await send_ntfy_alert(f"🎙️ OmniDigest Audio Briefing — {display_date}", short_msg, audio_url)
+            if send_ntfy and audio_url:
+                short_msg = " • " + "\n • ".join(highlights[:3]) if highlights else "Your morning executive briefing is ready."
+                await send_ntfy_alert(f"🎙️ OmniDigest Audio Briefing — {display_date}", short_msg, audio_url)
 
-    return digest_entry
+            set_pipeline_state("completed", "Briefing synthesis complete", 100, task_id=timestamp_id)
+            return digest_entry
+        except Exception as e:
+            logger.error(f"Pipeline generation error: {e}")
+            set_pipeline_state("error", f"Pipeline error: {str(e)}", 0, error=str(e), task_id=timestamp_id)
+            raise e
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
@@ -352,7 +399,8 @@ async def health():
         "version": "2.5.0",
         "llm_model": "Qwen 2.5 (1.5B)",
         "llm_endpoint": LLM_API_BASE,
-        "scheduler": scheduler_state
+        "scheduler": scheduler_state,
+        "pipeline": pipeline_state
     }
 
 @app.get("/api/info")
@@ -364,6 +412,15 @@ async def get_info():
         "llm_type": "Local SLM",
         "llm_endpoint": LLM_API_BASE,
         "tts_engine": "Edge Neural TTS (Christopher Studio Voice)",
+        "scheduler": scheduler_state,
+        "pipeline": pipeline_state
+    }
+
+@app.get("/api/pipeline/status")
+async def get_pipeline_status():
+    return {
+        "status": "success",
+        "pipeline": pipeline_state,
         "scheduler": scheduler_state
     }
 
@@ -372,6 +429,7 @@ async def get_scheduler_status():
     return {
         "status": "success",
         "scheduler": scheduler_state,
+        "pipeline": pipeline_state,
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
@@ -404,6 +462,11 @@ async def get_digest_history():
 
 @app.post("/api/digest/generate")
 async def trigger_generate(req: GenerateRequest, background_tasks: BackgroundTasks):
+    if pipeline_lock.locked():
+        raise HTTPException(
+            status_code=409,
+            detail="A synthesis pipeline is already actively in progress. Check /api/pipeline/status."
+        )
     digest = await run_digest_pipeline(
         custom_prompt=req.custom_prompt or "",
         voice=req.voice or "en-US-ChristopherNeural",
@@ -411,7 +474,7 @@ async def trigger_generate(req: GenerateRequest, background_tasks: BackgroundTas
         category_filter=req.category_filter,
         speed_rate=req.speed_rate or "+0%"
     )
-    return {"status": "success", "digest": digest}
+    return {"status": "success", "digest": digest, "id": digest["id"]}
 
 @app.post("/api/digest/{digest_id}/pin")
 async def toggle_pin_digest(digest_id: str):
@@ -433,18 +496,23 @@ async def test_feed(payload: Dict[str, str]):
         headers = {"User-Agent": "Mozilla/5.0 (compatible; OmniDigest-Homelab/2.0)"}
         if shared_client:
             resp = await shared_client.get(url, headers=headers, follow_redirects=True)
-            if resp.status_code != 200:
-                return {"status": "error", "message": f"Server status {resp.status_code}"}
-            parsed = feedparser.parse(resp.text)
-            if parsed.bozo and not parsed.entries:
-                return {"status": "error", "message": "Failed to parse feed. Invalid format."}
-            return {
-                "status": "success",
-                "title": parsed.feed.get("title", "Unknown Feed"),
-                "entries_count": len(parsed.entries)
-            }
+        else:
+            async with httpx.AsyncClient(timeout=10.0) as local_client:
+                resp = await local_client.get(url, headers=headers, follow_redirects=True)
+
+        if resp.status_code != 200:
+            return {"status": "error", "ok": False, "message": f"Server status {resp.status_code}"}
+        parsed = feedparser.parse(resp.text)
+        if parsed.bozo and not parsed.entries:
+            return {"status": "error", "ok": False, "message": "Failed to parse feed. Invalid format."}
+        return {
+            "status": "success",
+            "ok": True,
+            "title": parsed.feed.get("title", "Unknown Feed"),
+            "entries_count": len(parsed.entries)
+        }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "ok": False, "message": str(e)}
 
 @app.delete("/api/digest/{digest_id}")
 async def delete_digest(digest_id: str):

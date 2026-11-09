@@ -181,71 +181,71 @@ async def synthesize_digest(articles: List[Dict[str, Any]], custom_prompt: str =
             async with httpx.AsyncClient(timeout=90.0) as local_client:
                 resp = await local_client.post(f"{LLM_API_BASE}/chat/completions", json=payload)
             
-            if resp.status_code == 200:
-                data = resp.json()
-                raw_content = data["choices"][0]["message"]["content"]
-                
-                # Attempt standard repair
-                repaired = repair_json_string(raw_content)
-                parsed = None
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_content = data["choices"][0]["message"]["content"]
+            
+            # Attempt standard repair
+            repaired = repair_json_string(raw_content)
+            parsed = None
 
-                # Step 1: Direct JSON parsing
-                try:
-                    parsed = json.loads(repaired)
-                except Exception as json_err:
-                    logger.warning(f"Direct JSON parse failed ({json_err}), attempting regex field extraction.")
-                    # Step 2: Fallback field extraction
-                    parsed = extract_fields_fallback(raw_content)
+            # Step 1: Direct JSON parsing
+            try:
+                parsed = json.loads(repaired)
+            except Exception as json_err:
+                logger.warning(f"Direct JSON parse failed ({json_err}), attempting regex field extraction.")
+                # Step 2: Fallback field extraction
+                parsed = extract_fields_fallback(raw_content)
 
-                if parsed:
-                    # 1. Highlights
-                    raw_highlights = parsed.get("highlights", [])
-                    highlights = []
-                    if isinstance(raw_highlights, list):
-                        for h in raw_highlights:
-                            h_str = str(h).strip().lstrip("-*• ")
-                            if h_str:
-                                highlights.append(h_str)
-                    elif isinstance(raw_highlights, str):
-                        highlights = [h.strip().lstrip("-*• ") for h in raw_highlights.split("\n") if h.strip()]
+            if parsed:
+                # 1. Highlights
+                raw_highlights = parsed.get("highlights", [])
+                highlights = []
+                if isinstance(raw_highlights, list):
+                    for h in raw_highlights:
+                        h_str = str(h).strip().lstrip("-*• ")
+                        if h_str:
+                            highlights.append(h_str)
+                elif isinstance(raw_highlights, str):
+                    highlights = [h.strip().lstrip("-*• ") for h in raw_highlights.split("\n") if h.strip()]
 
-                    # 2. Markdown Report
-                    raw_md = parsed.get("markdown_report", "")
-                    if isinstance(raw_md, dict):
-                        lines = []
-                        for k, v in raw_md.items():
-                            lines.append(f"### {k}\n")
-                            if isinstance(v, list):
-                                for item in v:
-                                    lines.append(f"- {item}")
-                            else:
-                                lines.append(str(v))
-                            lines.append("")
-                        markdown_report = "\n".join(lines)
-                    elif isinstance(raw_md, list):
-                        markdown_report = "\n".join([f"- {item}" for item in raw_md])
-                    else:
-                        markdown_report = str(raw_md)
+                # 2. Markdown Report
+                raw_md = parsed.get("markdown_report", "")
+                if isinstance(raw_md, dict):
+                    lines = []
+                    for k, v in raw_md.items():
+                        lines.append(f"### {k}\n")
+                        if isinstance(v, list):
+                            for item in v:
+                                lines.append(f"- {item}")
+                        else:
+                            lines.append(str(v))
+                        lines.append("")
+                    markdown_report = "\n".join(lines)
+                elif isinstance(raw_md, list):
+                    markdown_report = "\n".join([f"- {item}" for item in raw_md])
+                else:
+                    markdown_report = str(raw_md)
 
-                    # Clean any residual JSON tokens
-                    markdown_report = clean_synthesized_text(markdown_report)
+                # Clean any residual JSON tokens
+                markdown_report = clean_synthesized_text(markdown_report)
 
-                    # 3. Audio Script
-                    audio_script = str(parsed.get("audio_script", "")).strip()
+                # 3. Audio Script
+                audio_script = str(parsed.get("audio_script", "")).strip()
 
-                    # Fallbacks if any field was empty
-                    if not highlights:
-                        highlights = [f"{a['source']}: {a['title']}" for a in articles[:3]]
-                    if not audio_script:
-                        audio_script = f"Good morning. Welcome to your OmniDigest executive briefing. Today's top coverage includes {articles[0]['title'] if articles else 'key tech updates'}. That concludes your briefing."
-                    if not markdown_report or markdown_report.startswith("{"):
-                        markdown_report = f"## ⚡ Executive Intelligence Briefing\n\n" + "\n\n".join([f"### {a['title']}\n**Source**: {a['source']} · [Link]({a['link']})\n\n{a['snippet'][:250]}" for a in articles[:4]])
+                # Fallbacks if any field was empty
+                if not highlights:
+                    highlights = [f"{a['source']}: {a['title']}" for a in articles[:3]]
+                if not audio_script:
+                    audio_script = f"Good morning. Welcome to your OmniDigest executive briefing. Today's top coverage includes {articles[0]['title'] if articles else 'key tech updates'}. That concludes your briefing."
+                if not markdown_report or markdown_report.startswith("{"):
+                    markdown_report = f"## ⚡ Executive Intelligence Briefing\n\n" + "\n\n".join([f"### {a['title']}\n**Source**: {a['source']} · [Link]({a['link']})\n\n{a['snippet'][:250]}" for a in articles[:4]])
 
-                    logger.info("Successfully synthesized executive briefing via local SLM")
-                    return (markdown_report, audio_script, highlights)
+                logger.info("Successfully synthesized executive briefing via local SLM")
+                return (markdown_report, audio_script, highlights)
 
-            else:
-                logger.warning(f"LLM request status {resp.status_code}: {resp.text}")
+        else:
+            logger.warning(f"LLM request status {resp.status_code}: {resp.text}")
     except Exception as e:
         logger.error(f"Failed to query local LLM at {LLM_API_BASE}: {e}")
 

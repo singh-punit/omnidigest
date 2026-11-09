@@ -131,29 +131,275 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   /* ================================================================
-   * State Management
+   * Explicit Finite State Machine Definitions (UESA)
+   * UX, DX, and AX Guaranteed State Architecture
    * ================================================================ */
+  const FSM_STATES = {
+    PLAYER: {
+      EMPTY: 'empty',
+      LOADING: 'loading',
+      READY: 'ready',
+      PLAYING: 'playing',
+      PAUSED: 'paused',
+      BUFFERING: 'buffering',
+      ERROR: 'error'
+    },
+    PIPELINE: {
+      IDLE: 'idle',
+      CRAWLING: 'crawling',
+      SYNTHESIZING: 'synthesizing',
+      GENERATING_TTS: 'generating_tts',
+      READY: 'ready',
+      ERROR: 'error'
+    },
+    OVERLAY: {
+      NONE: 'none',
+      CMD_K: 'cmd-k',
+      LIVE_WIRE: 'live-wire',
+      FEEDS: 'feeds',
+      ARCHIVE: 'archive',
+      QR: 'qr'
+    },
+    TAB: {
+      MARKDOWN: 'markdown',
+      TRANSCRIPT: 'transcript',
+      SOURCES: 'sources'
+    },
+    LIVE_WIRE: {
+      IDLE: 'idle',
+      LOADING: 'loading',
+      POPULATED: 'populated',
+      EMPTY: 'empty',
+      ERROR: 'error'
+    },
+    THEME: {
+      LIGHT: 'light',
+      DARK: 'dark'
+    }
+  };
+
   const THEMES = ['light', 'dark'];
   const SPEEDS = [0.8, 1.0, 1.25, 1.5, 2.0];
 
   const State = {
     currentDigest: null,
     history: [],
-    archivePage: 1,
-    archivePerPage: 10,
-    archiveQuery: '',
+
+    // Explicit FSM States
+    playerState: FSM_STATES.PLAYER.EMPTY,
+    pipelineState: FSM_STATES.PIPELINE.IDLE,
+    activeOverlay: FSM_STATES.OVERLAY.NONE,
+    activeTab: FSM_STATES.TAB.MARKDOWN,
+    liveWireState: FSM_STATES.LIVE_WIRE.IDLE,
+    theme: FSM_STATES.THEME.LIGHT,
+
+    // Audio Metadata & Context
     isPlaying: false,
     speedIdx: 1,
     audioCtx: null,
     analyser: null,
     audioSrc: null,
     previousVolume: 1,
+
+    // Archive Pagination & Search
+    archivePage: 1,
+    archivePerPage: 10,
+    archiveQuery: '',
+
+    // Live Wire Data & Category
     feeds: [],
     liveArticles: [],
     liveCat: 'all',
+
+    // Spotlight Cmd+K Index
     cmdKIndex: 0,
     cmdKFilteredItems: [],
   };
+
+  /* ================================================================
+   * State Machine Controllers
+   * ================================================================ */
+  const OverlayMachine = {
+    getState: () => State.activeOverlay,
+    open(name) {
+      this.close(); // Guarantee mutual exclusivity - no overlay stacking
+      let el = null;
+      if (name === FSM_STATES.OVERLAY.CMD_K) el = D.cmdKModal;
+      else if (name === FSM_STATES.OVERLAY.LIVE_WIRE) el = D.liveNewsModal;
+      else if (name === FSM_STATES.OVERLAY.FEEDS) el = D.feedsModal;
+      else if (name === FSM_STATES.OVERLAY.ARCHIVE) el = D.archiveDrawer;
+      else if (name === FSM_STATES.OVERLAY.QR) el = D.qrModal;
+
+      if (el) {
+        el.classList.add('active');
+        State.activeOverlay = name;
+        document.body.setAttribute('data-active-overlay', name);
+      }
+      if (name === FSM_STATES.OVERLAY.CMD_K && D.cmdKInput) {
+        State.cmdKIndex = 0;
+        D.cmdKInput.value = '';
+        setTimeout(() => D.cmdKInput.focus(), 50);
+        renderCmdK('');
+      }
+    },
+    close() {
+      document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+      if (D.archiveDrawer) D.archiveDrawer.classList.remove('active');
+      if (D.cmdKInput) D.cmdKInput.blur();
+      State.activeOverlay = FSM_STATES.OVERLAY.NONE;
+      document.body.setAttribute('data-active-overlay', FSM_STATES.OVERLAY.NONE);
+    },
+    toggle(name) {
+      if (State.activeOverlay === name) this.close();
+      else this.open(name);
+    }
+  };
+
+  const TabsMachine = {
+    getState: () => State.activeTab,
+    setTab(tabName) {
+      if (!['markdown', 'transcript', 'sources'].includes(tabName)) return;
+      State.activeTab = tabName;
+      document.body.setAttribute('data-active-tab', tabName);
+      if (D.tabBtns) {
+        D.tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+      }
+      document.querySelectorAll('.tab-pane').forEach(p => {
+        p.classList.toggle('active', p.id === `tab-${tabName}`);
+      });
+    }
+  };
+
+  const AudioPlayerMachine = {
+    getState: () => State.playerState,
+    setState(newState) {
+      State.playerState = newState;
+      State.isPlaying = (newState === FSM_STATES.PLAYER.PLAYING);
+      document.body.setAttribute('data-player-state', newState);
+
+      if (D.playerCard) {
+        D.playerCard.classList.toggle('playing', newState === FSM_STATES.PLAYER.PLAYING);
+        D.playerCard.classList.toggle('player-loading', newState === FSM_STATES.PLAYER.LOADING || newState === FSM_STATES.PLAYER.BUFFERING);
+        D.playerCard.classList.toggle('player-error', newState === FSM_STATES.PLAYER.ERROR);
+      }
+
+      updatePlayPauseUI();
+      renderRecentStrip();
+    },
+    togglePlay(forcePlay = false) {
+      if (!D.audioElement || !D.audioElement.src || D.audioElement.src === location.href) {
+        showToast('No briefing loaded yet. Synthesize above.');
+        this.setState(FSM_STATES.PLAYER.EMPTY);
+        return;
+      }
+      initWebAudio();
+      if (forcePlay || D.audioElement.paused) {
+        D.audioElement.play().then(() => {
+          this.setState(FSM_STATES.PLAYER.PLAYING);
+        }).catch(err => {
+          this.setState(FSM_STATES.PLAYER.ERROR);
+          showToast('🔊 Audio playback blocked: ' + err.message);
+        });
+      } else {
+        D.audioElement.pause();
+        this.setState(FSM_STATES.PLAYER.PAUSED);
+      }
+    },
+    reset() {
+      if (D.audioElement) {
+        D.audioElement.pause();
+        D.audioElement.src = '';
+      }
+      if (D.currTime) D.currTime.textContent = '0:00';
+      if (D.totalTime) D.totalTime.textContent = '0:00';
+      if (D.playerTitle) D.playerTitle.textContent = 'No Briefing Loaded';
+      this.setState(FSM_STATES.PLAYER.EMPTY);
+    }
+  };
+
+  const PipelineMachine = {
+    getState: () => State.pipelineState,
+    isBusy: () => [FSM_STATES.PIPELINE.CRAWLING, FSM_STATES.PIPELINE.SYNTHESIZING, FSM_STATES.PIPELINE.GENERATING_TTS].includes(State.pipelineState),
+    setState(newState, progress = 0, stepText = '') {
+      State.pipelineState = newState;
+      document.body.setAttribute('data-pipeline-state', newState);
+
+      const busy = this.isBusy();
+      if (D.btnGenerateMain) D.btnGenerateMain.disabled = busy;
+      if (D.generateSpinner) D.generateSpinner.style.display = busy ? 'block' : 'none';
+      if (D.genProgress) D.genProgress.style.display = busy ? 'block' : 'none';
+
+      if (progress > 0 && D.progressBarFill) D.progressBarFill.style.width = progress + '%';
+      if (progress > 0 && D.progressPercent) D.progressPercent.textContent = progress + '%';
+      if (stepText && D.progressStepText) D.progressStepText.textContent = stepText;
+    }
+  };
+
+  const LiveWireMachine = {
+    getState: () => State.liveWireState,
+    setState(newState) {
+      State.liveWireState = newState;
+      document.body.setAttribute('data-live-wire-state', newState);
+    }
+  };
+
+  const ThemeMachine = {
+    getState: () => State.theme,
+    applyTheme(themeName) {
+      if (themeName !== 'dark') themeName = 'light';
+      State.theme = themeName;
+      document.documentElement.setAttribute('data-theme', themeName);
+      document.body.setAttribute('data-theme', themeName);
+      localStorage.setItem('omnidigest_theme', themeName);
+      if (D.themeIconSun && D.themeIconMoon) {
+        if (themeName === 'dark') {
+          D.themeIconSun.style.display = 'block';
+          D.themeIconMoon.style.display = 'none';
+        } else {
+          D.themeIconSun.style.display = 'none';
+          D.themeIconMoon.style.display = 'block';
+        }
+      }
+    },
+    toggle() {
+      const next = State.theme === 'light' ? 'dark' : 'light';
+      this.applyTheme(next);
+      showToast(next === 'light' ? 'Porcelain Light Mode' : 'Obsidian Dark Mode');
+    }
+  };
+
+  // Backward-Compatible Modal Adapters
+  function openModal(modalEl) {
+    if (modalEl === D.cmdKModal) OverlayMachine.open(FSM_STATES.OVERLAY.CMD_K);
+    else if (modalEl === D.liveNewsModal) OverlayMachine.open(FSM_STATES.OVERLAY.LIVE_WIRE);
+    else if (modalEl === D.feedsModal) OverlayMachine.open(FSM_STATES.OVERLAY.FEEDS);
+    else if (modalEl === D.archiveDrawer) OverlayMachine.open(FSM_STATES.OVERLAY.ARCHIVE);
+    else if (modalEl === D.qrModal) OverlayMachine.open(FSM_STATES.OVERLAY.QR);
+    else if (modalEl) modalEl.classList.add('active');
+  }
+
+  function closeModal(modalEl) {
+    if (modalEl) modalEl.classList.remove('active');
+    if (State.activeOverlay !== FSM_STATES.OVERLAY.NONE) {
+      const anyActive = document.querySelector('.modal-overlay.active, .drawer.active');
+      if (!anyActive) {
+        State.activeOverlay = FSM_STATES.OVERLAY.NONE;
+        document.body.setAttribute('data-active-overlay', FSM_STATES.OVERLAY.NONE);
+      }
+    }
+  }
+
+  function closeAllOverlays() {
+    OverlayMachine.close();
+  }
+
+  function initTheme() {
+    const saved = localStorage.getItem('omnidigest_theme') || 'light';
+    ThemeMachine.applyTheme(saved);
+  }
+
+  function applyTheme(t) { ThemeMachine.applyTheme(t); }
+  function toggleTheme() { ThemeMachine.toggle(); }
 
   function enforceCleanBranding() {
     if (D.aiModelBadge) {
@@ -244,53 +490,6 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('OmniDigest API notification:', err);
       return null;
     }
-  }
-
-  /* ================================================================
-   * Theme Management (Light Porcelain / Dark Obsidian)
-   * ================================================================ */
-  function initTheme() {
-    const saved = localStorage.getItem('omnidigest_theme') || 'light';
-    applyTheme(saved);
-  }
-
-  function applyTheme(themeName) {
-    if (themeName !== 'dark') themeName = 'light';
-    document.documentElement.setAttribute('data-theme', themeName);
-    localStorage.setItem('omnidigest_theme', themeName);
-    if (D.themeIconSun && D.themeIconMoon) {
-      if (themeName === 'dark') {
-        D.themeIconSun.style.display = 'block';
-        D.themeIconMoon.style.display = 'none';
-      } else {
-        D.themeIconSun.style.display = 'none';
-        D.themeIconMoon.style.display = 'block';
-      }
-    }
-  }
-
-  function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme') || 'light';
-    const next = current === 'light' ? 'dark' : 'light';
-    applyTheme(next);
-    showToast(next === 'light' ? 'Porcelain Light Mode' : 'Obsidian Dark Mode');
-  }
-
-  /* ================================================================
-   * Modal Management
-   * ================================================================ */
-  function openModal(modalEl) {
-    if (modalEl) modalEl.classList.add('active');
-  }
-
-  function closeModal(modalEl) {
-    if (modalEl) modalEl.classList.remove('active');
-  }
-
-  function closeAllOverlays() {
-    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
-    if (D.archiveDrawer) D.archiveDrawer.classList.remove('active');
-    if (D.cmdKInput) D.cmdKInput.blur();
   }
 
   /* ================================================================
@@ -525,33 +724,16 @@ document.addEventListener('DOMContentLoaded', () => {
    * Audio Playback Controls
    * ================================================================ */
   function togglePlay(forcePlay = false) {
-    if (!D.audioElement || !D.audioElement.src || D.audioElement.src === location.href) {
-      showToast('No briefing loaded yet. Synthesize above.');
-      return;
-    }
-    initWebAudio();
-    if (forcePlay || D.audioElement.paused) {
-      D.audioElement.play().then(() => {
-        State.isPlaying = true;
-        updatePlayPauseUI();
-        renderRecentStrip();
-      }).catch(err => {
-        showToast('🔊 Audio playback blocked: ' + err.message);
-      });
-    } else {
-      D.audioElement.pause();
-      State.isPlaying = false;
-      updatePlayPauseUI();
-      renderRecentStrip();
-    }
+    AudioPlayerMachine.togglePlay(forcePlay);
   }
 
   function updatePlayPauseUI() {
-    if (D.iconPlay) D.iconPlay.style.display = State.isPlaying ? 'none' : 'block';
-    if (D.iconPause) D.iconPause.style.display = State.isPlaying ? 'block' : 'none';
-    if (D.playerCard) D.playerCard.classList.toggle('playing', State.isPlaying);
+    const isPlaying = (State.playerState === FSM_STATES.PLAYER.PLAYING);
+    if (D.iconPlay) D.iconPlay.style.display = isPlaying ? 'none' : 'block';
+    if (D.iconPause) D.iconPause.style.display = isPlaying ? 'block' : 'none';
+    if (D.playerCard) D.playerCard.classList.toggle('playing', isPlaying);
     if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = State.isPlaying ? 'playing' : 'paused';
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
     }
   }
 
@@ -664,11 +846,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Audio Setup (Use relative URL so it plays seamlessly across LAN, Tailscale, Cloudflare)
     const audioSrc = digest.audio_file ? ('/podcasts/' + digest.audio_file) : (digest.audio_url ? (digest.audio_url.startsWith('http') ? new URL(digest.audio_url).pathname : digest.audio_url) : '');
-    if (D.audioElement && audioSrc) {
-      D.audioElement.src = audioSrc;
-      D.audioElement.load();
-      D.audioElement.playbackRate = SPEEDS[State.speedIdx];
-      updateMediaSession(digest, dateStr);
+    if (D.audioElement) {
+      if (audioSrc) {
+        D.audioElement.src = audioSrc;
+        D.audioElement.load();
+        D.audioElement.playbackRate = SPEEDS[State.speedIdx];
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.LOADING);
+        updateMediaSession(digest, dateStr);
+      } else {
+        D.audioElement.src = '';
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.EMPTY);
+      }
     }
     if (D.btnActionDownload) {
       if (audioSrc) {
@@ -890,8 +1078,15 @@ document.addEventListener('DOMContentLoaded', () => {
         await api(`/api/digest/${btn.dataset.id}`, 'DELETE');
         State.history = State.history.filter(h => String(h.id) !== btn.dataset.id);
         if (State.currentDigest && String(State.currentDigest.id) === btn.dataset.id) {
-          State.currentDigest = null;
-          if (D.audioElement) D.audioElement.src = '';
+          if (State.history.length > 0) {
+            renderDigest(State.history[0]);
+          } else {
+            State.currentDigest = null;
+            AudioPlayerMachine.reset();
+            if (D.markdownContent) D.markdownContent.innerHTML = `<div class="welcome-empty"><h3>Welcome to OmniDigest</h3><p>Click play or hit <kbd>Enter</kbd> to synthesize your first briefing.</p></div>`;
+            if (D.highlightsContainer) D.highlightsContainer.innerHTML = '';
+            if (D.transcriptContent) D.transcriptContent.innerHTML = `<p class="placeholder">Spoken script will appear after synthesis.</p>`;
+          }
         }
         renderArchiveList();
         renderRecentStrip();
@@ -908,13 +1103,28 @@ document.addEventListener('DOMContentLoaded', () => {
    * ================================================================ */
   async function loadLiveNews() {
     if (!D.liveNewsContainer) return;
+    if (State.liveWireState === FSM_STATES.LIVE_WIRE.LOADING) return;
+
+    LiveWireMachine.setState(FSM_STATES.LIVE_WIRE.LOADING);
     D.liveNewsContainer.innerHTML = '<div class="load-state"><div class="spinner"></div><p>Crawling live feeds...</p></div>';
-    const data = await api('/api/news/live?max_items=12');
-    if (data && data.articles) {
-      State.liveArticles = data.articles;
-      renderLiveNews();
-    } else {
-      D.liveNewsContainer.innerHTML = '<p class="placeholder">No live wire articles currently available.</p>';
+
+    try {
+      const data = await api('/api/news/live?max_items=12');
+      if (data && data.articles && data.articles.length > 0) {
+        State.liveArticles = data.articles;
+        LiveWireMachine.setState(FSM_STATES.LIVE_WIRE.POPULATED);
+        renderLiveNews();
+      } else if (data && data.articles && data.articles.length === 0) {
+        State.liveArticles = [];
+        LiveWireMachine.setState(FSM_STATES.LIVE_WIRE.EMPTY);
+        renderLiveNews();
+      } else {
+        LiveWireMachine.setState(FSM_STATES.LIVE_WIRE.ERROR);
+        D.liveNewsContainer.innerHTML = '<div class="error-banner"><p>Live wire feeds currently unavailable. Check configured sources.</p></div>';
+      }
+    } catch (err) {
+      LiveWireMachine.setState(FSM_STATES.LIVE_WIRE.ERROR);
+      D.liveNewsContainer.innerHTML = `<div class="error-banner"><p>Error connecting to live wire: ${escapeHtml(err.message)}</p></div>`;
     }
   }
 
@@ -979,21 +1189,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = btn.closest('.feed-row');
         const url = row.querySelector('.feed-url').value;
         if (!url) return showToast('Enter an RSS URL first');
+        btn.disabled = true;
+        btn.textContent = '⏳ Testing...';
         showToast('🧪 Testing RSS feed connection...');
-        const res = await api('/api/feeds/test', 'POST', { url });
-        if (res && res.status === 'ok') {
-          showToast(`✅ ${res.title || 'Feed OK'} (${res.entries_count || 0} entries)`);
-        } else {
-          showToast('❌ RSS Feed validation failed');
+        try {
+          const res = await api('/api/feeds/test', 'POST', { url });
+          if (res && (res.ok || res.status === 'success' || res.status === 'ok')) {
+            showToast(`✅ ${res.title || 'Feed OK'} (${res.entries_count || 0} entries)`);
+          } else {
+            showToast(`❌ RSS Feed validation failed: ${res?.message || 'Invalid response'}`);
+          }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '🧪 Test';
         }
       });
     });
   }
 
   /* ================================================================
-   * Synthesis Pipeline Execution
+   * Synthesis Pipeline Execution (PipelineMachine FSM)
    * ================================================================ */
   async function synthesize() {
+    if (PipelineMachine.isBusy()) {
+      showToast('⏳ Synthesis already in progress in homelab...');
+      return;
+    }
+
     const prompt = D.customPromptInput ? D.customPromptInput.value.trim() : '';
     const voice = D.voiceSelect ? D.voiceSelect.value : 'en-US-ChristopherNeural';
     const speedRate = D.speedRateSelect ? D.speedRateSelect.value : '+0%';
@@ -1003,52 +1225,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const customPrompt = [focusText, prompt].filter(Boolean).join('. ');
 
-    if (D.btnGenerateMain) D.btnGenerateMain.disabled = true;
-    if (D.generateSpinner) D.generateSpinner.style.display = 'block';
-    if (D.genProgress) D.genProgress.style.display = 'block';
+    PipelineMachine.setState(FSM_STATES.PIPELINE.CRAWLING, 18, '📡 Crawling homelab RSS sources...');
 
-    const steps = [
-      { text: '📡 Crawling homelab RSS sources...', pct: 18 },
-      { text: '✦ Synthesizing with Qwen 2.5 (1.5B)...', pct: 48 },
-      { text: 'Structuring executive intelligence memo...', pct: 70 },
-      { text: 'Generating Edge Neural TTS audio broadcast...', pct: 88 },
-      { text: '📦 Finalizing audio briefing...', pct: 96 },
-    ];
-    let stepIdx = 0;
-    const progressInterval = setInterval(() => {
-      if (stepIdx < steps.length) {
-        if (D.progressStepText) D.progressStepText.textContent = steps[stepIdx].text;
-        if (D.progressPercent) D.progressPercent.textContent = steps[stepIdx].pct + '%';
-        if (D.progressBarFill) D.progressBarFill.style.width = steps[stepIdx].pct + '%';
-        stepIdx++;
+    const stepTimer1 = setTimeout(() => {
+      if (PipelineMachine.isBusy()) {
+        PipelineMachine.setState(FSM_STATES.PIPELINE.SYNTHESIZING, 48, '✦ Synthesizing with Qwen 2.5 (1.5B)...');
       }
     }, 2800);
 
-    if (D.progressStepText) D.progressStepText.textContent = steps[0].text;
-    if (D.progressPercent) D.progressPercent.textContent = '18%';
-    if (D.progressBarFill) D.progressBarFill.style.width = '18%';
+    const stepTimer2 = setTimeout(() => {
+      if (PipelineMachine.isBusy()) {
+        PipelineMachine.setState(FSM_STATES.PIPELINE.GENERATING_TTS, 82, '🎙️ Rendering Edge Neural audio broadcast...');
+      }
+    }, 7000);
 
-    const res = await api('/api/digest/generate', 'POST', {
-      custom_prompt: customPrompt || undefined,
-      voice,
-      speed_rate: speedRate,
-      send_ntfy: true,
-    });
+    try {
+      const res = await api('/api/digest/generate', 'POST', {
+        custom_prompt: customPrompt || undefined,
+        voice,
+        speed_rate: speedRate,
+        send_ntfy: true,
+      });
 
-    clearInterval(progressInterval);
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
 
-    if (D.btnGenerateMain) D.btnGenerateMain.disabled = false;
-    if (D.generateSpinner) D.generateSpinner.style.display = 'none';
-    if (D.genProgress) D.genProgress.style.display = 'none';
-    if (D.progressBarFill) D.progressBarFill.style.width = '0%';
+      const digest = (res && res.digest) ? res.digest : res;
 
-    if (res && res.id) {
-      showToast('✅ Intelligence briefing synthesized!');
-      await loadHistory();
-      renderDigest(res);
-      togglePlay(true);
-    } else {
-      showError('Synthesis Pipeline Error', 'Synthesis returned no result. Check local SLM backend status.');
+      if (digest && digest.id) {
+        PipelineMachine.setState(FSM_STATES.PIPELINE.READY, 100, 'Briefing synthesized!');
+        showToast('✅ Intelligence briefing synthesized!');
+        await loadHistory();
+        renderDigest(digest);
+        AudioPlayerMachine.togglePlay(true);
+        setTimeout(() => PipelineMachine.setState(FSM_STATES.PIPELINE.IDLE, 0, ''), 2200);
+      } else {
+        PipelineMachine.setState(FSM_STATES.PIPELINE.ERROR, 0, 'Synthesis failed');
+        showError('Synthesis Pipeline Error', 'Synthesis returned no result. Check local SLM backend status.');
+      }
+    } catch (err) {
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      PipelineMachine.setState(FSM_STATES.PIPELINE.ERROR, 0, 'Synthesis error');
+      showError('Synthesis Pipeline Error', err.message || 'Connection failure to synthesis engine.');
     }
   }
 
@@ -1553,29 +1772,40 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Audio Element Lifecycle Events
+    // Audio Element Lifecycle Events (Explicit State Machine Integration)
     if (D.audioElement) {
+      D.audioElement.addEventListener('loadstart', () => {
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.LOADING);
+      });
+      D.audioElement.addEventListener('canplay', () => {
+        if (D.audioElement.paused && State.playerState !== FSM_STATES.PLAYER.PLAYING) {
+          AudioPlayerMachine.setState(FSM_STATES.PLAYER.READY);
+        }
+      });
+      D.audioElement.addEventListener('waiting', () => {
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.BUFFERING);
+      });
       D.audioElement.addEventListener('timeupdate', () => {
         if (D.currTime) D.currTime.textContent = formatTime(D.audioElement.currentTime);
         if (D.totalTime && D.audioElement.duration) D.totalTime.textContent = formatTime(D.audioElement.duration);
       });
       D.audioElement.addEventListener('loadedmetadata', () => {
         if (D.totalTime) D.totalTime.textContent = formatTime(D.audioElement.duration);
+        if (D.audioElement.paused) AudioPlayerMachine.setState(FSM_STATES.PLAYER.READY);
       });
       D.audioElement.addEventListener('ended', () => {
-        State.isPlaying = false;
-        updatePlayPauseUI();
-        renderRecentStrip();
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.READY);
       });
       D.audioElement.addEventListener('play', () => {
-        State.isPlaying = true;
-        updatePlayPauseUI();
-        renderRecentStrip();
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.PLAYING);
       });
       D.audioElement.addEventListener('pause', () => {
-        State.isPlaying = false;
-        updatePlayPauseUI();
-        renderRecentStrip();
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.PAUSED);
+      });
+      D.audioElement.addEventListener('error', e => {
+        console.warn('Audio element error:', e);
+        AudioPlayerMachine.setState(FSM_STATES.PLAYER.ERROR);
+        showToast('⚠️ Audio failed to stream. Briefing may need regeneration.');
       });
     }
 
@@ -1610,10 +1840,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const streamUrl = location.origin + (State.currentDigest.audio_url || '');
         if (D.qrLinkInput) D.qrLinkInput.value = streamUrl;
         if (D.qrImage) D.qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(streamUrl)}`;
-        openModal(D.qrModal);
+        OverlayMachine.open(FSM_STATES.OVERLAY.QR);
       });
     }
-    if (D.modalQrClose) D.modalQrClose.addEventListener('click', () => closeModal(D.qrModal));
+    if (D.modalQrClose) D.modalQrClose.addEventListener('click', () => OverlayMachine.close());
     if (D.btnQrCopyLink) {
       D.btnQrCopyLink.addEventListener('click', () => {
         if (D.qrLinkInput) {
@@ -1631,14 +1861,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Tabs Switching
+    // Tabs Switching via TabsMachine
     D.tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        D.tabBtns.forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        const pane = $(`tab-${btn.dataset.tab}`);
-        if (pane) pane.classList.add('active');
+        TabsMachine.setTab(btn.dataset.tab);
       });
     });
     if (D.btnCopyTabContent) {
@@ -1652,8 +1878,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Live News Modal
-    if (D.btnLiveNews) D.btnLiveNews.addEventListener('click', () => { loadLiveNews(); openModal(D.liveNewsModal); });
-    if (D.modalLiveClose) D.modalLiveClose.addEventListener('click', () => closeModal(D.liveNewsModal));
+    if (D.btnLiveNews) D.btnLiveNews.addEventListener('click', () => { loadLiveNews(); OverlayMachine.open(FSM_STATES.OVERLAY.LIVE_WIRE); });
+    if (D.modalLiveClose) D.modalLiveClose.addEventListener('click', () => OverlayMachine.close());
     if (D.btnRefreshLiveNews) D.btnRefreshLiveNews.addEventListener('click', loadLiveNews);
     if (D.liveNewsSearch) D.liveNewsSearch.addEventListener('input', renderLiveNews);
     D.liveChips.forEach(chip => {
@@ -1666,7 +1892,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (D.btnDigestVisible) {
       D.btnDigestVisible.addEventListener('click', () => {
-        closeModal(D.liveNewsModal);
+        OverlayMachine.close();
         if (D.customPromptInput) D.customPromptInput.value = 'Focus on the latest breaking headlines from the live RSS wire.';
         synthesize();
       });
@@ -1679,10 +1905,10 @@ document.addEventListener('DOMContentLoaded', () => {
         State.archiveQuery = '';
         if (D.archiveSearch) D.archiveSearch.value = '';
         renderArchiveList();
-        D.archiveDrawer.classList.toggle('active');
+        OverlayMachine.toggle(FSM_STATES.OVERLAY.ARCHIVE);
       });
     }
-    if (D.btnCloseArchive) D.btnCloseArchive.addEventListener('click', () => closeModal(D.archiveDrawer));
+    if (D.btnCloseArchive) D.btnCloseArchive.addEventListener('click', () => OverlayMachine.close());
     if (D.archiveSearch) D.archiveSearch.addEventListener('input', e => {
       State.archiveQuery = e.target.value;
       State.archivePage = 1;
@@ -1692,8 +1918,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (D.archiveNextBtn) D.archiveNextBtn.addEventListener('click', () => { State.archivePage++; renderArchiveList(); });
 
     // Feeds Modal
-    if (D.btnFeeds) D.btnFeeds.addEventListener('click', () => { loadFeeds(); openModal(D.feedsModal); });
-    if (D.modalClose) D.modalClose.addEventListener('click', () => closeModal(D.feedsModal));
+    if (D.btnFeeds) D.btnFeeds.addEventListener('click', () => { loadFeeds(); OverlayMachine.open(FSM_STATES.OVERLAY.FEEDS); });
+    if (D.modalClose) D.modalClose.addEventListener('click', () => OverlayMachine.close());
     if (D.btnAddFeedRow) D.btnAddFeedRow.addEventListener('click', () => { State.feeds.push({ name: '', url: '', category: '' }); renderFeeds(); });
     if (D.btnResetFeeds) D.btnResetFeeds.addEventListener('click', () => { loadFeeds(); showToast('🔄 Feeds restored'); });
     if (D.btnSaveFeeds) {
@@ -1707,11 +1933,82 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await api('/api/feeds', 'POST', feeds);
         if (res) {
           showToast('✅ Feeds saved successfully');
-          closeModal(D.feedsModal);
+          OverlayMachine.close();
         }
       });
     }
   }
+
+  /* ================================================================
+   * Global Unified Agent Dispatcher & State Observability (AX API)
+   * ================================================================ */
+  function OmniDispatcher(action, payload) {
+    switch (action) {
+      case 'PLAY':
+        AudioPlayerMachine.togglePlay(true);
+        break;
+      case 'PAUSE':
+        if (D.audioElement) D.audioElement.pause();
+        break;
+      case 'TOGGLE_PLAY':
+        AudioPlayerMachine.togglePlay();
+        break;
+      case 'SET_TAB':
+        TabsMachine.setTab(payload);
+        break;
+      case 'OPEN_OVERLAY':
+        OverlayMachine.open(payload);
+        break;
+      case 'CLOSE_OVERLAYS':
+        OverlayMachine.close();
+        break;
+      case 'SYNTHESIZE':
+        synthesize();
+        break;
+      case 'SET_THEME':
+        ThemeMachine.applyTheme(payload);
+        break;
+      case 'TOGGLE_THEME':
+        ThemeMachine.toggle();
+        break;
+      default:
+        console.warn('Unknown OmniDigest dispatch action:', action);
+    }
+    return window.OmniDigest.getState();
+  }
+
+  window.OmniDigest = {
+    version: '2.5.0',
+    getState: () => ({
+      player: State.playerState,
+      pipeline: State.pipelineState,
+      overlay: State.activeOverlay,
+      tab: State.activeTab,
+      liveWire: State.liveWireState,
+      theme: State.theme,
+      isPlaying: State.isPlaying,
+      currentDigest: State.currentDigest ? {
+        id: State.currentDigest.id,
+        date: State.currentDigest.date,
+        pinned: State.currentDigest.pinned
+      } : null,
+      historyCount: State.history.length,
+      activeTopic: (() => {
+        let topic = '';
+        D.chips.forEach(c => { if (c.classList.contains('active')) topic = c.dataset.focus || 'all'; });
+        return topic;
+      })()
+    }),
+    getMachines: () => ({
+      player: AudioPlayerMachine,
+      pipeline: PipelineMachine,
+      overlay: OverlayMachine,
+      tabs: TabsMachine,
+      liveWire: LiveWireMachine,
+      theme: ThemeMachine,
+    }),
+    dispatch: (action, payload) => OmniDispatcher(action, payload)
+  };
 
   /* ================================================================
    * Start App
